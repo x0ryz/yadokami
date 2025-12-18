@@ -1,1 +1,8 @@
-fastapi[standard]
+fastapi
+uvicorn
+sqlmodel
+sqlalchemy
+asyncpg
+alembic
+pydantic
+pydantic-settings
