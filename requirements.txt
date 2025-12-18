@@ -6,3 +6,4 @@ asyncpg
 alembic
 pydantic
 pydantic-settings
+sqladmin

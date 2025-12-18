@@ -1,8 +1,15 @@
 from typing import Union
 
 from fastapi import FastAPI
+from sqladmin import Admin
+
+from src.database import engine
+from src.admin import LeadAdmin
 
 app = FastAPI()
+admin = Admin(app, engine, title="My Admin")
+
+admin.add_view(LeadAdmin)
 
 
 @app.get("/")
