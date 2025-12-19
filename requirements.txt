@@ -9,3 +9,4 @@ pydantic-settings
 sqladmin
 faststream[redis, cli]
 httpx
+loguru

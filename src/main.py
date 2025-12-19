@@ -1,13 +1,16 @@
+import uuid
 from typing import Union
 
 from fastapi import FastAPI
 from sqladmin import Admin
+from faststream.redis import RedisBroker
 
 from src.database import engine
 from src.admin import LeadAdmin
+from src.logger import setup_logging
 
-from faststream.redis import RedisBroker
 
+logger = setup_logging()
 app = FastAPI()
 admin = Admin(app, engine, title="My Admin")
 
@@ -25,13 +28,15 @@ async def read_item(item_id: int, q: Union[str, None] = None):
 
 @app.post("/send_message/{phone}")
 async def send_message(phone: str):
+    request_id = str(uuid.uuid4())
     broker = RedisBroker("redis://redis:6379")
     await broker.connect()
 
+    logger.info(f"New API request received", request_id=request_id)
+
     await broker.publish(
-        {"phone": phone},
+        {"phone": phone, "request_id": request_id},
         channel="whatsapp_messages"
     )
 
-    print("Завдання відправлено в чергу!")
     await broker.close()

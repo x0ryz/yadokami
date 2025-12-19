@@ -3,7 +3,10 @@ import httpx, asyncio
 from faststream import FastStream
 from faststream.redis import RedisBroker
 from src.schemas import WhatsAppMessage
+from src.logger import setup_logging
 from src.config import settings
+
+logger = setup_logging()
 
 broker = RedisBroker(settings.REDIS_URL)
 app = FastStream(broker)
@@ -34,10 +37,14 @@ async def send_whatsapp_message(phone: str):
 
 @broker.subscriber("whatsapp_messages")
 async def handle_messages(message: WhatsAppMessage):
-    try:
-        result = await send_whatsapp_message(message.phone)
-        print(f"Message sent to {message.phone}: {result}")
-        await asyncio.sleep(1)
-    except Exception as e:
-        print(f"Failed to send message to {message.phone}: {e}")
-        
+    with logger.contextualize(request_id=message.request_id):
+        logger.info(f"Received message request for phone: {message.phone}")
+
+        try:
+            result = await send_whatsapp_message(message.phone)
+            logger.success(
+                f"Message sent successfully. Meta Response: {result}")
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.exception(f"Failed to send message to {message.phone}")
+            
