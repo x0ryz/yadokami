@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     META_URL: str
     META_PHONE_ID: str
     META_TOKEN: str
+    VERIFY_TOKEN: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
