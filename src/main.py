@@ -1,11 +1,15 @@
 import uuid
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from sqladmin import Admin
 from faststream.redis import RedisBroker
 
-from src.database import engine
-from src.admin import LeadAdmin
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select
+
+from src.database import engine, get_session
+from src.models import WabaAccount
+# from src.admin import WabaAccountAdmin
 from src.logger import setup_logging
 from src.config import settings
 
@@ -14,7 +18,7 @@ logger = setup_logging()
 app = FastAPI()
 admin = Admin(app, engine, title="My Admin")
 
-admin.add_view(LeadAdmin)
+# admin.add_view(WabaAccountAdmin)
 
 
 @app.get("/")
@@ -32,6 +36,7 @@ async def verify_webhook(request: Request):
         return int(hub_challenge or 0)
 
     raise HTTPException(status_code=403, detail="Invalid token")
+
 
 @app.post("/webhook")
 async def receive_webhook(request: Request):
@@ -54,6 +59,7 @@ async def receive_webhook(request: Request):
 
     return {"status": "ok"}
 
+
 @app.post("/send_message/{phone}")
 async def send_message(phone: str, type: str = "text", text: str = "Це тестове повідомлення з API"):
     request_id = str(uuid.uuid4())
@@ -73,3 +79,17 @@ async def send_message(phone: str, type: str = "text", text: str = "Це тес�
         )
 
         return {"status": "sent", "request_id": request_id}
+
+
+@app.post("/waba/sync")
+async def trigger_waba_sync():
+    """Відправляє команду воркеру на оновлення даних з Meta."""
+    request_id = str(uuid.uuid4())
+
+    async with RedisBroker(settings.REDIS_URL) as broker:
+        await broker.publish(
+            {"request_id": request_id},
+            channel="sync_account_data"
+        )
+
+    return {"status": "sync_started", "request_id": request_id}

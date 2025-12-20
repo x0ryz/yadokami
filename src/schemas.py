@@ -8,3 +8,7 @@ class WhatsAppMessage(BaseModel):
     type: Literal["text", "template"]
     body: str
     request_id: str = str(uuid.uuid4())
+
+
+class WabaSyncRequest(BaseModel):
+    request_id: str = str(uuid.uuid4())
