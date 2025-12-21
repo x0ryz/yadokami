@@ -90,6 +90,7 @@ class Message(SQLModel, table=True):
     __tablename__ = "messages"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
+    wamid: Optional[str] = Field(default=None, index=True)
 
     waba_phone_id: UUID = Field(foreign_key="waba_phone_numbers.id")
     contact_id: UUID = Field(foreign_key="contacts.id")
