@@ -31,3 +31,16 @@ class MetaClient:
         resp = await self.client.get(url)
         resp.raise_for_status()
         return resp.json()
+
+    async def get_media_url(self, media_id: str) -> str:
+        """Fetch media URL from Meta Graph API."""
+        url = f"{self.base_url}/{media_id}"
+        resp = await self.client.get(url)
+        resp.raise_for_status()
+        return resp.json().get("url")
+
+    async def download_media_file(self, media_url: str) -> bytes:
+        """Download media file from Meta Graph API."""
+        resp = await self.client.get(media_url)
+        resp.raise_for_status()
+        return resp.content
