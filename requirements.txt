@@ -10,3 +10,4 @@ sqladmin
 faststream[redis, cli]
 httpx
 loguru
+aioboto3

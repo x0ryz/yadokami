@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     DEBUG: bool = False
@@ -17,6 +18,11 @@ class Settings(BaseSettings):
     META_TOKEN: str
     VERIFY_TOKEN: str
 
+    R2_ACCOUNT_ID: str
+    R2_ACCESS_KEY: str
+    R2_SECRET_KEY: str
+    R2_BUCKET_NAME: str
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @computed_field
@@ -24,4 +30,9 @@ class Settings(BaseSettings):
     def DATABASE_URL(self) -> str:
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
-settings = Settings() # type: ignore
+    @property
+    def R2_ENDPOINT_URL(self) -> str:
+        return f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+
+settings = Settings()  # type: ignore

@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
+from sqlmodel import Column, DateTime, Field, Relationship, SQLModel, table
 
 
 def get_utc_now():
@@ -84,6 +84,31 @@ class Contact(SQLModel, table=True):
     messages: list["Message"] = Relationship(back_populates="contact")
 
 
+class MediaFile(SQLModel, table=True):
+    __tablename__ = "media_files"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+
+    message_id: Optional[UUID] = Field(default=None, foreign_key="messages.id")
+
+    meta_media_id: str = Field(index=True)
+
+    file_name: str
+    file_mime_type: str
+    file_size: Optional[int] = None
+
+    caption: Optional[str] = Field(default=None)
+
+    r2_key: str
+    bucket_name: str
+
+    created_at: datetime = Field(
+        default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))
+    )
+
+    message: Optional["Message"] = Relationship(back_populates="media_files")
+
+
 class Message(SQLModel, table=True):
     """Messages sent and received via WhatsApp"""
 
@@ -99,10 +124,9 @@ class Message(SQLModel, table=True):
     status: MessageStatus = Field(default=MessageStatus.PENDING)
 
     message_type: str = Field(default="text")
-    body: str
+    body: Optional[str] = Field(default=None)
 
-    media_id: Optional[str] = Field(default=None)
-    caption: Optional[str] = Field(default=None)
+    media_files: list["MediaFile"] = Relationship(back_populates="message")
 
     created_at: datetime = Field(
         default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))

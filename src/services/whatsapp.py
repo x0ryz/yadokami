@@ -1,16 +1,22 @@
+import mimetypes
+import uuid
+
 from loguru import logger
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.clients.meta import MetaClient
+from src.core.config import settings
 from src.models import (
     Contact,
+    MediaFile,
     Message,
     MessageDirection,
     MessageStatus,
     WabaPhoneNumber,
 )
 from src.schemas import WhatsAppMessage
+from src.services.storage import StorageService
 
 
 class WhatsAppService:
@@ -164,6 +170,8 @@ class WhatsAppService:
             logger.warning(f"Webhook for unknown phone ID: {phone_number_id}")
             return
 
+        storage_service = StorageService()
+
         for msg in value.get("messages", []):
             wamid = msg.get("id")
             from_phone = msg.get("from")
@@ -194,60 +202,76 @@ class WhatsAppService:
                 wamid=wamid,
                 message_type=parsed_data["type"],
                 body=parsed_data["body"],
-                media_id=parsed_data["media_id"],
-                caption=parsed_data["caption"],
             )
             self.session.add(new_msg)
+            await self.session.commit()
+            await self.session.refresh(new_msg)
+            if parsed_data["media_id"]:
+                await self._process_media_attachment(
+                    new_msg, parsed_data, msg, storage_service
+                )
             logger.info(f"Saved {parsed_data['type']} message from {from_phone}")
-
-        await self.session.commit()
 
     def _parse_message_data(self, msg: dict) -> dict:
         """Return structures: {type, body, media_id, caption}"""
         msg_type = msg.get("type")
-        result = {"type": msg_type, "body": "", "media_id": None, "caption": None}
+        data = msg.get(msg_type, {})
+        result = {"type": msg_type, "body": None, "media_id": None, "caption": None}
 
-        if msg_type == "text":
-            result["body"] = msg.get("text", {}).get("body", "")
+        match msg_type:
+            case "text":
+                result["body"] = data.get("body")
 
-        elif msg_type == "image":
-            media = msg.get("image", {})
-            result["media_id"] = media.get("id")
-            result["caption"] = media.get("caption")
-            result["body"] = "[Фото]"
+            case "image" | "document" | "video":
+                result["media_id"] = data.get("id")
+                result["caption"] = data.get("caption")
 
-        elif msg_type == "video":
-            media = msg.get("video", {})
-            result["media_id"] = media.get("id")
-            result["caption"] = media.get("caption")
-            result["body"] = "[Відео]"
+            case "voice" | "audio" | "sticker":
+                result["media_id"] = data.get("id")
 
-        elif msg_type == "document":
-            media = msg.get("document", {})
-            result["media_id"] = media.get("id")
-            result["caption"] = media.get("caption")
-            filename = media.get("filename", "file")
-            result["body"] = f"[Документ: {filename}]"
-
-        elif msg_type == "audio":
-            media = msg.get("audio", {})
-            result["media_id"] = media.get("id")
-            result["body"] = "[Аудіо]"
-
-        elif msg_type == "voice":
-            media = msg.get("voice", {})
-            result["media_id"] = media.get("id")
-            result["body"] = "[Голосове]"
-
-        elif msg_type == "sticker":
-            media = msg.get("sticker", {})
-            result["media_id"] = media.get("id")
-            result["body"] = "[Стікер]"
-
-        else:
-            result["body"] = f"[{msg_type} message]"
-
-        if result["caption"]:
-            result["body"] += f": {result['caption']}"
+            case _:
+                pass
 
         return result
+
+    async def _process_media_attachment(
+        self,
+        db_message: Message,
+        parsed_data: dict,
+        raw_msg: dict,
+        storage: StorageService,
+    ):
+        try:
+            media_id = parsed_data["media_id"]
+
+            media_url = await self.meta_client.get_media_url(media_id)
+            file_content = await self.meta_client.download_media_file(media_url)
+
+            msg_type = parsed_data["type"]
+            mime_type = raw_msg.get(msg_type, {}).get(
+                "mime_type", "application/octet-stream"
+            )
+            ext = mimetypes.guess_extension(mime_type) or ".bin"
+
+            filename = f"{uuid.uuid4()}{ext}"
+            r2_key = f"whatsapp/{msg_type}s/{filename}"
+
+            await storage.upload_file(file_content, r2_key, mime_type)
+
+            media_entry = MediaFile(
+                message_id=db_message.id,
+                meta_media_id=media_id,
+                file_name=filename,
+                file_mime_type=mime_type,
+                file_size=len(file_content),
+                caption=parsed_data["caption"],
+                r2_key=r2_key,
+                bucket_name=settings.R2_BUCKET_NAME,
+            )
+            self.session.add(media_entry)
+            await self.session.commit()
+
+            logger.info(f"Saved media to R2 and linked to message: {r2_key}")
+
+        except Exception as e:
+            logger.error(f"Media processing failed for msg {db_message.id}: {e}")
