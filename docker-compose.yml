@@ -8,19 +8,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT}:5432"
-
-  web:
-    build: .
-    restart: always
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      - db
+    networks:
+      - default
 
   redis:
     image: redis:7-alpine
@@ -33,18 +22,33 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - default
+
+  app:
+    build: .
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    networks:
+      - default
 
   worker:
     build: .
-    command: faststream run src.worker:app --reload
-    volumes:
-      - .:/app
-    restart: always
     depends_on:
-      redis:
-        condition: service_healthy
-    env_file: .env
+      - db
+      - redis
+    env_file:
+      - .env
+    networks:
+      - default
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  default:
+    driver: bridge

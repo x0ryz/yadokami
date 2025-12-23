@@ -16,3 +16,4 @@ jinja2
 redis
 asyncio
 tenacity
+gunicorn

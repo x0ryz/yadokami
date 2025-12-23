@@ -1,0 +1,26 @@
+services:
+  app:
+    container_name: jidoka_app
+    restart: always
+    command: >
+      sh -c "alembic upgrade head &&
+      gunicorn src.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile -"
+    networks:
+      - default
+      - traefik_public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jidoka.rule=Host(`jidoka.x0ryz.cc`)"
+      - "traefik.http.routers.jidoka.entrypoints=websecure"
+      - "traefik.http.routers.jidoka.tls.certresolver=myresolver"
+      - "traefik.http.services.jidoka.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik_public"
+
+  worker:
+    container_name: jidoka_worker
+    restart: always
+    command: faststream run src.worker:app
+
+networks:
+  traefik_public:
+    external: true
