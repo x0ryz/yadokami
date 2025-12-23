@@ -1,6 +1,24 @@
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.core.config import settings
+
+
+def is_transient_error(exception):
+    """Повертає True, якщо помилка тимчасова (мережа або 5xx від сервера)"""
+    if isinstance(exception, httpx.HTTPStatusError):
+        return (
+            exception.response.status_code >= 500
+            or exception.response.status_code == 429
+        )
+    return isinstance(
+        exception, (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError)
+    )
 
 
 class MetaClient:
@@ -8,6 +26,12 @@ class MetaClient:
         self.client = client
         self.base_url = settings.META_URL
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception(is_transient_error),
+        reraise=True,
+    )
     async def send_message(self, phone_id: str, data: dict):
         """Send a message to a phone number using Meta Graph API."""
         url = f"{self.base_url}/{phone_id}/messages"

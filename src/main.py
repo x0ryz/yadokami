@@ -179,11 +179,11 @@ async def get_chat_history(
         select(Message)
         .where(Message.contact_id == contact_id)
         .options(selectinload(Message.media_files))
-        .order_by(Message.created_at)
+        .order_by(desc(Message.created_at))
         .offset(offset)
         .limit(limit)
     )
 
     result = await session.exec(statement)
     messages = result.all()
-    return messages
+    return list(reversed(messages))
