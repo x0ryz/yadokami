@@ -24,7 +24,6 @@ class WhatsAppMediaService:
         meta_msg: MetaMessage,
     ) -> Optional[MediaFile]:
         try:
-            # Визначаємо тип медіа та отримуємо об'єкт MetaMedia з Pydantic моделі
             media_obj: MetaMedia | None = getattr(meta_msg, meta_msg.type, None)
 
             if not media_obj:
@@ -34,21 +33,17 @@ class WhatsAppMediaService:
             media_id = media_obj.id
             caption = media_obj.caption
 
-            # Завантаження з Meta
             media_url_meta = await self.meta_client.get_media_url(media_id)
             file_content = await self.meta_client.download_media_file(media_url_meta)
 
-            # Визначення розширення
             mime_type = media_obj.mime_type or "application/octet-stream"
             ext = mimetypes.guess_extension(mime_type) or ".bin"
 
             filename = f"{uuid.uuid4()}{ext}"
             r2_key = f"whatsapp/{meta_msg.type}s/{filename}"
 
-            # Завантаження в R2
             await self.storage_service.upload_file(file_content, r2_key, mime_type)
 
-            # Збереження в БД
             media_entry = MediaFile(
                 message_id=db_message.id,
                 meta_media_id=media_id,

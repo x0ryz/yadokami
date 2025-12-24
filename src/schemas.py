@@ -6,17 +6,12 @@ from pydantic import BaseModel, Field
 
 from src.models import MessageDirection, MessageStatus
 
-# --- Outbound Models (Те, що ми відправляємо) ---
-
 
 class WhatsAppMessage(BaseModel):
     phone_number: str
     type: Literal["text", "template"]
     body: str
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-
-
-# --- Meta Webhook Models (Те, що ми отримуємо) ---
 
 
 class MetaProfile(BaseModel):
@@ -83,16 +78,11 @@ class MetaWebhookPayload(BaseModel):
     entry: List[MetaEntry] = []
 
 
-# --- Internal API Responses ---
-
-
 class WabaSyncRequest(BaseModel):
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 class WebhookEvent(BaseModel):
-    """Використовується в worker.py для отримання сирого JSON з Redis"""
-
     payload: dict[str, Any]
 
 

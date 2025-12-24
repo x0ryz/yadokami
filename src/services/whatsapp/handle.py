@@ -35,23 +35,19 @@ class WhatsAppHandlerService:
             await self.notifier(payload)
 
     async def process_webhook(self, raw_payload: dict):
-        # 1. Валідація через Pydantic
         try:
             webhook = MetaWebhookPayload.model_validate(raw_payload)
         except Exception as e:
             logger.error(f"Failed to validate webhook payload: {e}")
             return
 
-        # 2. Ітерація по структурі
         for entry in webhook.entry:
             for change in entry.changes:
                 value = change.value
 
-                # Обробка статусів
                 if value.statuses:
                     await self._handle_statuses(value.statuses)
 
-                # Обробка повідомлень
                 if value.messages:
                     phone_number_id = value.metadata.get("phone_number_id")
                     await self._handle_incoming_messages(
@@ -115,7 +111,6 @@ class WhatsAppHandlerService:
     async def _handle_incoming_messages(
         self, messages: list[MetaMessage], phone_number_id: str
     ):
-        # Перевірка нашого WABA номеру
         stmt_phone = select(WabaPhoneNumber).where(
             WabaPhoneNumber.phone_number_id == phone_number_id
         )
@@ -126,13 +121,11 @@ class WhatsAppHandlerService:
             return
 
         for msg in messages:
-            # Дедуплікація
             stmt_dup = select(Message).where(Message.wamid == msg.id)
             if (await self.session.exec(stmt_dup)).first():
                 logger.info(f"Message {msg.id} already processed")
                 continue
 
-            # Знайти/створити контакт
             stmt_contact = select(Contact).where(Contact.phone_number == msg.from_)
             contact = (await self.session.exec(stmt_contact)).first()
 
@@ -142,15 +135,12 @@ class WhatsAppHandlerService:
                 await self.session.commit()
                 await self.session.refresh(contact)
 
-            # Витягуємо тіло повідомлення
             body = None
             if msg.type == "text" and msg.text:
                 body = msg.text.body
             elif msg.type in ["image", "document", "video"] and getattr(msg, msg.type):
-                # Для медіа беремо підпис як тіло
                 body = getattr(msg, msg.type).caption
 
-            # Створення повідомлення в БД
             new_msg = Message(
                 waba_phone_id=waba_phone.id,
                 contact_id=contact.id,
@@ -165,7 +155,6 @@ class WhatsAppHandlerService:
             await self.session.commit()
             await self.session.refresh(new_msg)
 
-            # Обробка медіа (делегуємо MediaService)
             media_files_list = []
             if msg.type in ["image", "video", "document", "audio", "voice", "sticker"]:
                 media_entry = await self.media_service.process_media_attachment(
@@ -173,7 +162,6 @@ class WhatsAppHandlerService:
                 )
 
                 if media_entry:
-                    # Одразу генеруємо URL для фронтенду
                     url = await self.media_service.storage_service.get_presigned_url(
                         media_entry.r2_key
                     )
@@ -187,7 +175,6 @@ class WhatsAppHandlerService:
                         }
                     )
 
-            # Сповіщення через WS
             msg_data = {
                 "id": str(new_msg.id),
                 "from": msg.from_,
