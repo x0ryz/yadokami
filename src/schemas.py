@@ -1,24 +1,98 @@
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.models import MessageDirection, MessageStatus
+
+# --- Outbound Models (Те, що ми відправляємо) ---
 
 
 class WhatsAppMessage(BaseModel):
     phone_number: str
     type: Literal["text", "template"]
     body: str
-    request_id: str = str(uuid.uuid4())
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+
+# --- Meta Webhook Models (Те, що ми отримуємо) ---
+
+
+class MetaProfile(BaseModel):
+    name: str
+
+
+class MetaContact(BaseModel):
+    wa_id: str
+    profile: MetaProfile
+
+
+class MetaMedia(BaseModel):
+    id: str
+    mime_type: Optional[str] = None
+    sha256: Optional[str] = None
+    caption: Optional[str] = None
+
+
+class MetaText(BaseModel):
+    body: str
+
+
+class MetaMessage(BaseModel):
+    from_: str = Field(alias="from")
+    id: str
+    timestamp: str
+    type: str
+    text: Optional[MetaText] = None
+    image: Optional[MetaMedia] = None
+    video: Optional[MetaMedia] = None
+    audio: Optional[MetaMedia] = None
+    voice: Optional[MetaMedia] = None
+    document: Optional[MetaMedia] = None
+    sticker: Optional[MetaMedia] = None
+
+
+class MetaStatus(BaseModel):
+    id: str
+    status: str
+    timestamp: str
+    recipient_id: str
+
+
+class MetaValue(BaseModel):
+    messaging_product: str
+    metadata: dict
+    contacts: List[MetaContact] = []
+    messages: List[MetaMessage] = []
+    statuses: List[MetaStatus] = []
+
+
+class MetaChange(BaseModel):
+    value: MetaValue
+    field: str
+
+
+class MetaEntry(BaseModel):
+    id: str
+    changes: List[MetaChange] = []
+
+
+class MetaWebhookPayload(BaseModel):
+    object: str
+    entry: List[MetaEntry] = []
+
+
+# --- Internal API Responses ---
 
 
 class WabaSyncRequest(BaseModel):
-    request_id: str = str(uuid.uuid4())
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 class WebhookEvent(BaseModel):
+    """Використовується в worker.py для отримання сирого JSON з Redis"""
+
     payload: dict[str, Any]
 
 
