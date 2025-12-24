@@ -136,6 +136,7 @@ class WhatsAppService:
                 await self._notify(
                     "status_update",
                     {
+                        "id": str(db_message.id),
                         "wamid": wamid,
                         "old_status": "pending",
                         "new_status": "sent",
@@ -210,6 +211,7 @@ class WhatsAppService:
                         await self._notify(
                             "status_update",
                             {
+                                "id": str(db_message.id),
                                 "wamid": wamid,
                                 "old_status": old_status,
                                 "new_status": new_status,
