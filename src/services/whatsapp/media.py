@@ -7,14 +7,17 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.clients.meta import MetaClient
 from src.core.config import settings
+from src.core.uow import UnitOfWork
 from src.models import MediaFile, Message
 from src.schemas import MetaMedia, MetaMessage
 from src.services.storage import StorageService
 
 
 class WhatsAppMediaService:
-    def __init__(self, session: AsyncSession, meta_client: MetaClient):
-        self.session = session
+    def __init__(
+        self, uow: UnitOfWork, meta_client: MetaClient, storage_service: StorageService
+    ):
+        self.uow = uow
         self.meta_client = meta_client
         self.storage_service = StorageService()
 
@@ -22,7 +25,7 @@ class WhatsAppMediaService:
         self,
         db_message: Message,
         meta_msg: MetaMessage,
-    ) -> Optional[MediaFile]:
+    ) -> MediaFile | None:
         try:
             media_obj: MetaMedia | None = getattr(meta_msg, meta_msg.type, None)
 
@@ -44,7 +47,8 @@ class WhatsAppMediaService:
 
             await self.storage_service.upload_file(file_content, r2_key, mime_type)
 
-            media_entry = MediaFile(
+            media_entry = await self.uow.media.create(
+                auto_flush=True,
                 message_id=db_message.id,
                 meta_media_id=media_id,
                 file_name=filename,
@@ -54,9 +58,6 @@ class WhatsAppMediaService:
                 r2_key=r2_key,
                 bucket_name=settings.R2_BUCKET_NAME,
             )
-            self.session.add(media_entry)
-            await self.session.commit()
-            await self.session.refresh(media_entry)
 
             logger.info(f"Saved media to R2: {r2_key}")
             return media_entry

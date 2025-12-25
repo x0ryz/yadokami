@@ -9,6 +9,7 @@ from src.clients.meta import MetaClient
 from src.core.config import settings
 from src.core.database import async_session_maker
 from src.core.logger import setup_logging
+from src.core.uow import UnitOfWork
 from src.models import WebhookLog
 from src.schemas import WabaSyncRequest, WebhookEvent, WhatsAppMessage
 from src.services.sync import SyncService
@@ -65,11 +66,11 @@ async def handle_messages(
     with logger.contextualize(request_id=message.request_id):
         logger.info(f"Received message request for phone: {message.phone_number}")
 
-        async with async_session_maker() as session:
-            meta_client = MetaClient(client)
-            service = WhatsAppService(session, meta_client, notifier=publish_ws_update)
+        uow = UnitOfWork(async_session_maker)
+        meta_client = MetaClient(client)
+        service = WhatsAppService(uow, meta_client, notifier=publish_ws_update)
 
-            await service.send_outbound_message(message)
+        await service.send_outbound_message(message)
 
 
 @broker.subscriber("sync_account_data")
@@ -94,6 +95,7 @@ async def handle_raw_webhook(
 ):
     data = event.payload
 
+    # 1. Логування вебхука (тут можна залишити просту сесію, бо це окрема коротка дія)
     async with async_session_maker() as session:
         try:
             log_entry = WebhookLog(payload=data)
@@ -102,9 +104,17 @@ async def handle_raw_webhook(
         except Exception as e:
             logger.error(f"Failed to save webhook log: {e}")
 
-        try:
-            meta_client = MetaClient(client)
-            service = WhatsAppService(session, meta_client, notifier=publish_ws_update)
-            await service.process_webhook(data)
-        except Exception as e:
-            logger.exception("Error processing webhook in service")
+    # 2. Основна обробка
+    try:
+        # ✅ ВИПРАВЛЕННЯ: Створюємо UnitOfWork
+        uow = UnitOfWork(async_session_maker)
+
+        meta_client = MetaClient(client)
+
+        # ✅ Передаємо uow, а не session
+        service = WhatsAppService(uow, meta_client, notifier=publish_ws_update)
+
+        await service.process_webhook(data)
+
+    except Exception as e:
+        logger.exception("Error processing webhook in service")

@@ -1,33 +1,29 @@
 from typing import Awaitable, Callable, Optional
 
 from loguru import logger
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.clients.meta import MetaClient
+from src.core.uow import UnitOfWork
 from src.models import (
-    Contact,
-    Message,
     MessageDirection,
     MessageStatus,
-    WabaPhoneNumber,
 )
 from src.schemas import MetaMessage, MetaStatus, MetaWebhookPayload
+from src.services.storage import StorageService
 from src.services.whatsapp.media import WhatsAppMediaService
 
 
 class WhatsAppHandlerService:
     def __init__(
         self,
-        session: AsyncSession,
+        uow: UnitOfWork,
         meta_client: MetaClient,
         notifier: Optional[Callable[[dict], Awaitable[None]]] = None,
     ):
-        self.session = session
+        self.uow = uow
         self.meta_client = meta_client
         self.notifier = notifier
-        self.media_service = WhatsAppMediaService(session, meta_client)
+        self.storage_service = StorageService()
 
     async def _notify(self, event_type: str, data: dict):
         if self.notifier:
@@ -62,6 +58,118 @@ class WhatsAppHandlerService:
             "failed": MessageStatus.FAILED,
         }
 
+        async with self.uow:
+            for status in statuses:
+                new_status = status_map.get(status.status)
+                if not new_status:
+                    continue
+
+                db_message = await self.uow.messages.get_by_wamid(status.id)
+
+                if db_message:
+                    old_status = db_message.status
+
+                    if self._is_newer_status(old_status, new_status):
+                        db_message.status = new_status
+                        self.uow.session.add(db_message)
+
+                        await self._notify(
+                            "status_update",
+                            {
+                                "id": str(db_message.id),
+                                "wamid": status.id,
+                                "old_status": old_status,
+                                "new_status": new_status,
+                                "phone": db_message.contact.phone_number
+                                if db_message.contact
+                                else None,
+                            },
+                        )
+
+    async def _handle_incoming_messages(
+        self, messages: list[MetaMessage], phone_number_id: str
+    ):
+        waba_phone_db_id = None
+        async with self.uow:
+            waba_phone = await self.uow.waba.get_by_phone_id(phone_number_id)
+            if waba_phone:
+                waba_phone_db_id = waba_phone.id
+
+        if not waba_phone_db_id:
+            logger.warning(f"Webhook for unknown phone ID: {phone_number_id}")
+            return
+
+        for msg in messages:
+            async with self.uow:
+                if await self.uow.messages.get_by_wamid(msg.id):
+                    logger.info(f"Message {msg.id} already processed")
+                    continue
+
+                contact = await self.uow.contacts.get_or_create(msg.from_)
+
+                body = None
+                if msg.type == "text" and msg.text:
+                    body = msg.text.body
+                elif msg.type in ["image", "document", "video"] and getattr(
+                    msg, msg.type
+                ):
+                    body = getattr(msg, msg.type).caption
+
+                new_msg = await self.uow.messages.create(
+                    auto_flush=True,
+                    waba_phone_id=waba_phone.id,
+                    contact_id=contact.id,
+                    direction=MessageDirection.INBOUND,
+                    status=MessageStatus.RECEIVED,
+                    wamid=msg.id,
+                    message_type=msg.type,
+                    body=body,
+                )
+
+                media_files_list = []
+                if msg.type in [
+                    "image",
+                    "video",
+                    "document",
+                    "audio",
+                    "voice",
+                    "sticker",
+                ]:
+                    media_service = WhatsAppMediaService(
+                        self.uow, self.meta_client, self.storage_service
+                    )
+                    media_entry = await media_service.process_media_attachment(
+                        new_msg, msg
+                    )
+
+                    if media_entry:
+                        url = await media_service.storage_service.get_presigned_url(
+                            media_entry.r2_key
+                        )
+                        media_files_list.append(
+                            {
+                                "id": str(media_entry.id),
+                                "file_name": media_entry.file_name,
+                                "file_mime_type": media_entry.file_mime_type,
+                                "url": url,
+                                "caption": media_entry.caption,
+                            }
+                        )
+
+                msg_data = {
+                    "id": str(new_msg.id),
+                    "from": msg.from_,
+                    "type": new_msg.message_type,
+                    "body": new_msg.body,
+                    "wamid": new_msg.wamid,
+                    "created_at": new_msg.created_at.isoformat(),
+                    "media_files": media_files_list,
+                }
+                await self._notify("new_message", msg_data)
+
+    def _is_newer_status(
+        self, old_status: MessageStatus, new_status: MessageStatus
+    ) -> bool:
         weights = {
             MessageStatus.PENDING: 0,
             MessageStatus.SENT: 1,
@@ -69,119 +177,4 @@ class WhatsAppHandlerService:
             MessageStatus.READ: 3,
             MessageStatus.FAILED: 4,
         }
-
-        for status in statuses:
-            wamid = status.id
-            new_status = status_map.get(status.status)
-
-            if not new_status:
-                continue
-
-            stmt = (
-                select(Message)
-                .where(Message.wamid == wamid)
-                .options(selectinload(Message.contact))
-            )
-            db_message = (await self.session.exec(stmt)).first()
-
-            if db_message:
-                current_weight = weights.get(db_message.status, -1)
-                new_weight = weights.get(new_status, -1)
-
-                if new_weight > current_weight:
-                    old_status = db_message.status
-                    db_message.status = new_status
-                    self.session.add(db_message)
-
-                    await self._notify(
-                        "status_update",
-                        {
-                            "id": str(db_message.id),
-                            "wamid": wamid,
-                            "old_status": old_status,
-                            "new_status": new_status,
-                            "phone": db_message.contact.phone_number
-                            if db_message.contact
-                            else None,
-                        },
-                    )
-
-        await self.session.commit()
-
-    async def _handle_incoming_messages(
-        self, messages: list[MetaMessage], phone_number_id: str
-    ):
-        stmt_phone = select(WabaPhoneNumber).where(
-            WabaPhoneNumber.phone_number_id == phone_number_id
-        )
-        waba_phone = (await self.session.exec(stmt_phone)).first()
-
-        if not waba_phone:
-            logger.warning(f"Webhook for unknown phone ID: {phone_number_id}")
-            return
-
-        for msg in messages:
-            stmt_dup = select(Message).where(Message.wamid == msg.id)
-            if (await self.session.exec(stmt_dup)).first():
-                logger.info(f"Message {msg.id} already processed")
-                continue
-
-            stmt_contact = select(Contact).where(Contact.phone_number == msg.from_)
-            contact = (await self.session.exec(stmt_contact)).first()
-
-            if not contact:
-                contact = Contact(phone_number=msg.from_)
-                self.session.add(contact)
-                await self.session.commit()
-                await self.session.refresh(contact)
-
-            body = None
-            if msg.type == "text" and msg.text:
-                body = msg.text.body
-            elif msg.type in ["image", "document", "video"] and getattr(msg, msg.type):
-                body = getattr(msg, msg.type).caption
-
-            new_msg = Message(
-                waba_phone_id=waba_phone.id,
-                contact_id=contact.id,
-                direction=MessageDirection.INBOUND,
-                status=MessageStatus.RECEIVED,
-                wamid=msg.id,
-                message_type=msg.type,
-                body=body,
-            )
-
-            self.session.add(new_msg)
-            await self.session.commit()
-            await self.session.refresh(new_msg)
-
-            media_files_list = []
-            if msg.type in ["image", "video", "document", "audio", "voice", "sticker"]:
-                media_entry = await self.media_service.process_media_attachment(
-                    new_msg, msg
-                )
-
-                if media_entry:
-                    url = await self.media_service.storage_service.get_presigned_url(
-                        media_entry.r2_key
-                    )
-                    media_files_list.append(
-                        {
-                            "id": str(media_entry.id),
-                            "file_name": media_entry.file_name,
-                            "file_mime_type": media_entry.file_mime_type,
-                            "url": url,
-                            "caption": media_entry.caption,
-                        }
-                    )
-
-            msg_data = {
-                "id": str(new_msg.id),
-                "from": msg.from_,
-                "type": new_msg.message_type,
-                "body": new_msg.body,
-                "wamid": new_msg.wamid,
-                "created_at": new_msg.created_at.isoformat(),
-                "media_files": media_files_list,
-            }
-            await self._notify("new_message", msg_data)
+        return weights.get(new_status, -1) > weights.get(old_status, -1)
