@@ -22,3 +22,4 @@ taskiq
 taskiq-redis
 taskiq-fastapi
 sentry-sdk[fastapi]
+aiolimiter
