@@ -16,6 +16,7 @@ from src.models import WebhookLog, get_utc_now
 from src.schemas import WabaSyncRequest, WebhookEvent, WhatsAppMessage
 from src.services.campaign import CampaignSenderService
 from src.services.sync import SyncService
+from src.services.websocket import BatchProgressEvent
 from src.services.whatsapp import WhatsAppService
 
 logger = setup_logging()
@@ -87,42 +88,92 @@ async def handle_raw_webhook_task(
 
 @broker.task(task_name="process_campaign_batch")
 async def process_campaign_batch_task(
-    campaign_id: str, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
+    campaign_id: str,
+    batch_number: int = 1,
+    client: httpx.AsyncClient = TaskiqDepends(get_http_client),
 ):
     """
-    Takes a batch of contacts and processes them sequentially with rate limiting.
+    Process a batch of contacts with detailed progress tracking.
+
+    Sends WebSocket notifications:
+    - When batch starts
+    - Progress within batch (every N messages)
+    - When batch completes
+    - Aggregate campaign progress
     """
-    BATCH_SIZE = 100 
+    BATCH_SIZE = 100
+    PROGRESS_UPDATE_INTERVAL = 10
 
     uow = UnitOfWork(async_session_maker)
     meta_client = MetaClient(client)
-    sender = CampaignSenderService(
-        uow, meta_client, notifier=publish_ws_update)
+    sender = CampaignSenderService(uow, meta_client, notifier=publish_ws_update)
 
+    # Get contacts for this batch
     async with uow:
         contacts = await uow.campaign_contacts.get_sendable_contacts(
             UUID(campaign_id), limit=BATCH_SIZE
         )
 
     if not contacts:
+        # No more contacts, check if campaign is complete
         await sender._check_campaign_completion(UUID(campaign_id))
         return
 
+    batch_size = len(contacts)
     logger.info(
-        f"Processing batch of {len(contacts)} contacts for campaign {campaign_id}")
+        f"Batch #{batch_number}: Processing {batch_size} contacts "
+        f"for campaign {campaign_id}"
+    )
 
-    for link in contacts:
+    # Notify batch start
+    await sender._notify_event(
+        BatchProgressEvent(
+            campaign_id=UUID(campaign_id),
+            batch_number=batch_number,
+            batch_size=batch_size,
+            processed=0,
+            successful=0,
+            failed=0,
+        )
+    )
+
+    processed = 0
+    successful = 0
+    failed = 0
+
+    for idx, link in enumerate(contacts, start=1):
         async with limiter:
             try:
                 await sender.send_single_message(
                     campaign_id=UUID(campaign_id),
                     link_id=link.id,
-                    contact_id=link.contact_id
+                    contact_id=link.contact_id,
                 )
+                successful += 1
+
             except Exception as e:
                 logger.error(f"Error sending in batch: {e}")
+                failed += 1
 
-    await process_campaign_batch_task.kiq(campaign_id)
+            processed += 1
+
+            # Send progress update every N messages
+            if processed % PROGRESS_UPDATE_INTERVAL == 0 or processed == batch_size:
+                await sender.notify_batch_progress(
+                    campaign_id=UUID(campaign_id),
+                    batch_number=batch_number,
+                    batch_size=batch_size,
+                    processed=processed,
+                    successful=successful,
+                    failed=failed,
+                )
+
+    logger.info(
+        f"Batch #{batch_number} completed: {successful} successful, {failed} failed"
+    )
+
+    # Queue next batch
+    await process_campaign_batch_task.kiq(campaign_id, batch_number + 1)
 
 
 @broker.task(task_name="campaign_start")
@@ -131,19 +182,27 @@ async def handle_campaign_start_task(
 ):
     """Start processing a campaign"""
     with logger.contextualize(campaign_id=campaign_id):
-        logger.info(f"Task: Starting campaign {campaign_id}")
+        logger.info(f"Starting campaign {campaign_id}")
         try:
             uow = UnitOfWork(async_session_maker)
             meta_client = MetaClient(client)
-            sender = CampaignSenderService(
-                uow, meta_client, notifier=publish_ws_update)
+            sender = CampaignSenderService(uow, meta_client, notifier=publish_ws_update)
 
             await sender.start_campaign(UUID(campaign_id))
 
-            await process_campaign_batch_task.kiq(campaign_id)
+            # Start first batch
+            await process_campaign_batch_task.kiq(campaign_id, batch_number=1)
 
-        except Exception:
+        except Exception as e:
             logger.exception(f"Campaign {campaign_id} failed to start")
+
+            # Notify failure
+            from src.services.websocket import CampaignStatusEvent
+
+            event = CampaignStatusEvent(
+                campaign_id=UUID(campaign_id), status="FAILED", error=str(e)
+            )
+            await publish_ws_update(event.to_dict())
 
 
 @broker.task(task_name="campaign_resume")
@@ -156,8 +215,7 @@ async def handle_campaign_resume_task(
         try:
             uow = UnitOfWork(async_session_maker)
             meta_client = MetaClient(client)
-            sender = CampaignSenderService(
-                uow, meta_client, notifier=publish_ws_update)
+            sender = CampaignSenderService(uow, meta_client, notifier=publish_ws_update)
 
             await sender.resume_campaign(UUID(campaign_id))
 
