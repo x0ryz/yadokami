@@ -1,0 +1,26 @@
+# Python cache and compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Local virtual environments
+env/
+venv/
+.venv/
+
+# Environment variables (should be passed via docker-compose)
+.env
+.env.*
+
+# Git
+.git
+.gitignore
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Docker
+Dockerfile

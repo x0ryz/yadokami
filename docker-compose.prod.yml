@@ -1,29 +1,4 @@
 services:
-  traefik:
-    image: traefik:v3.0
-    restart: always
-    command:
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "./letsencrypt:/letsencrypt"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    networks:
-      - proxy_net
-      - default
-
   db:
     image: postgres:15
     restart: always
@@ -54,13 +29,14 @@ services:
     env_file: .env
     networks:
       - default
-      - proxy_net
+      - traefik_public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend-webhooks.rule=Host(`dev.x0ryz.cc`) && PathPrefix(`/api/webhook`)"
+      - "traefik.http.routers.backend-webhooks.rule=Host(`jidoka.x0ryz.cc`) && PathPrefix(`/api/webhook`)"
       - "traefik.http.routers.backend-webhooks.entrypoints=websecure"
       - "traefik.http.routers.backend-webhooks.tls.certresolver=myresolver"
       - "traefik.http.services.backend-svc.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik_public"
 
   worker:
     build: ./backend
@@ -92,12 +68,13 @@ services:
       - proxy_net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.middlewares.my-auth.basicauth.users=admin:$apr1$elGQDAvh$NH4VTlh6fiPKjdqTv2rPn/"
-      - "traefik.http.routers.frontend-secure.rule=Host(`dev.x0ryz.cc`)"
-      - "traefik.http.routers.frontend-secure.entrypoints=websecure"
-      - "traefik.http.routers.frontend-secure.tls.certresolver=myresolver"
-      - "traefik.http.routers.frontend-secure.middlewares=my-auth"
-      - "traefik.http.services.frontend-svc.loadbalancer.server.port=80"
+      - "traefik.http.routers.jidoka-frontend.rule=Host(`jidoka.x0ryz.cc`)"
+      - "traefik.http.routers.jidoka-frontend.entrypoints=websecure"
+      - "traefik.http.routers.jidoka-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.jidoka-frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik_public"
+      - "traefik.http.middlewares.jidoka-auth.basicauth.users=admin:$apr1$elGQDAvh$NH4VTlh6fiPKjdqTv2rPn/"
+      - "traefik.http.routers.jidoka-frontend.middlewares=jidoka-auth"
 
 volumes:
   postgres_data:
@@ -106,5 +83,5 @@ volumes:
 networks:
   default:
     driver: bridge
-  proxy_net:
-    name: proxy_net
+  traefik_public:
+    external: true
