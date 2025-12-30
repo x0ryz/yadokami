@@ -25,8 +25,10 @@ services:
     networks:
       - default
 
-  app:
-    build: .
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     depends_on:
       - db
       - redis
@@ -36,7 +38,9 @@ services:
       - default
 
   worker:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     depends_on:
       - db
       - redis
@@ -46,7 +50,9 @@ services:
       - default
 
   scheduler:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     depends_on:
       - db
       - redis
@@ -55,6 +61,13 @@ services:
     command: taskiq scheduler src.core.broker:scheduler src.worker
     networks:
       - default
+
+  frontend:
+    build: ./frontend
+    container_name: jidoka_frontend
+    restart: always
+    ports:
+      - "80:80"
 
 volumes:
   postgres_data:

@@ -1,26 +1,110 @@
 services:
-  app:
-    container_name: jidoka_app
+  traefik:
+    image: traefik:v3.0
     restart: always
-    command: >
-      sh -c "alembic upgrade head &&
-      gunicorn src.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile -"
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - proxy_net
+      - default
+
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - default
-      - traefik_public
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+
+  backend:
+    build: ./backend
+    restart: always
+    depends_on:
+      - db
+      - redis
+    env_file: .env
+    networks:
+      - default
+      - proxy_net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jidoka.rule=Host(`jidoka.x0ryz.cc`)"
-      - "traefik.http.routers.jidoka.entrypoints=websecure"
-      - "traefik.http.routers.jidoka.tls.certresolver=myresolver"
-      - "traefik.http.services.jidoka.loadbalancer.server.port=8000"
-      - "traefik.docker.network=traefik_public"
+      - "traefik.http.routers.backend-webhooks.rule=Host(`dev.x0ryz.cc`) && PathPrefix(`/api/webhook`)"
+      - "traefik.http.routers.backend-webhooks.entrypoints=websecure"
+      - "traefik.http.routers.backend-webhooks.tls.certresolver=myresolver"
+      - "traefik.http.services.backend-svc.loadbalancer.server.port=8000"
 
   worker:
-    container_name: jidoka_worker
+    build: ./backend
     restart: always
-    command: faststream run src.worker:app
+    depends_on:
+      - db
+      - redis
+    env_file: .env
+    networks:
+      - default
+
+  scheduler:
+    build: ./backend
+    restart: always
+    depends_on:
+      - db
+      - redis
+    env_file: .env
+    command: taskiq scheduler src.core.broker:scheduler src.worker
+    networks:
+      - default
+
+  frontend:
+    build: ./frontend
+    container_name: jidoka_frontend
+    restart: always
+    networks:
+      - default
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.my-auth.basicauth.users=admin:$apr1$elGQDAvh$NH4VTlh6fiPKjdqTv2rPn/"
+      - "traefik.http.routers.frontend-secure.rule=Host(`dev.x0ryz.cc`)"
+      - "traefik.http.routers.frontend-secure.entrypoints=websecure"
+      - "traefik.http.routers.frontend-secure.tls.certresolver=myresolver"
+      - "traefik.http.routers.frontend-secure.middlewares=my-auth"
+      - "traefik.http.services.frontend-svc.loadbalancer.server.port=80"
+
+volumes:
+  postgres_data:
+  redis_data:
 
 networks:
-  traefik_public:
-    external: true
+  default:
+    driver: bridge
+  proxy_net:
+    name: proxy_net

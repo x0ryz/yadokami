@@ -1,6 +1,5 @@
-/.venv
 .env
-**/__pycache__/
-**.log
-**.yaml
-.idea
+.env.local
+.env.*
+
+letsencrypt/
