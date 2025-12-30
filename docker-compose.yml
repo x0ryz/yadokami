@@ -46,6 +46,7 @@ services:
       - redis
     env_file:
       - .env
+    command: taskiq worker src.core.broker:broker src.worker
     networks:
       - default
 
