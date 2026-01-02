@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     META_PHONE_ID: str
     META_TOKEN: str
     VERIFY_TOKEN: str
+    META_APP_SECRET: str
 
     R2_ACCOUNT_ID: str
     R2_ACCESS_KEY: str
