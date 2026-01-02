@@ -1,10 +1,8 @@
 from typing import Callable
 
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.repositories.campaign import CampaignContactRepository, CampaignRepository
 from src.repositories.contact import ContactRepository
-from src.repositories.media import MediaRepository
 from src.repositories.message import MessageRepository
 from src.repositories.template import TemplateRepository
 from src.repositories.waba import WabaRepository
@@ -18,14 +16,10 @@ class UnitOfWork:
     async def __aenter__(self):
         self.session = self.session_factory()
 
-        # Існуючі репозиторії
         self.messages = MessageRepository(self.session)
         self.contacts = ContactRepository(self.session)
         self.waba = WabaRepository(self.session)
         self.templates = TemplateRepository(self.session)
-        self.media = MediaRepository(self.session)
-
-        # Нові репозиторії для кампаній
         self.campaigns = CampaignRepository(self.session)
         self.campaign_contacts = CampaignContactRepository(self.session)
 

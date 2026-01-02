@@ -6,7 +6,6 @@ import taskiq_fastapi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis import asyncio as aioredis
-
 from src.core.broker import broker
 from src.core.config import settings
 from src.core.database import engine
@@ -78,7 +77,11 @@ taskiq_fastapi.init(broker, app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

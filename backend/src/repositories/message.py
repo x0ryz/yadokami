@@ -1,7 +1,6 @@
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
-
-from src.models import Message, MessageStatus
+from src.models import MediaFile, Message, MessageStatus
 from src.repositories.base import BaseRepository
 
 
@@ -18,6 +17,12 @@ class MessageRepository(BaseRepository[Message]):
             await self.session.refresh(message)
 
         return message
+
+    async def add_media_file(self, message_id: str, **kwargs) -> MediaFile:
+        """Додавання медіа-файлу до повідомлення (замінює MediaRepository)."""
+        media_entry = MediaFile(message_id=message_id, **kwargs)
+        self.session.add(media_entry)
+        return media_entry
 
     async def get_by_wamid(self, wamid: str) -> Message | None:
         stmt = (
