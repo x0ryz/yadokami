@@ -9,6 +9,8 @@ from redis import asyncio as aioredis
 from src.core.broker import broker
 from src.core.config import settings
 from src.core.database import engine
+from src.core.exceptions import BaseException
+from src.core.handlers import global_exception_handler, local_exception_handler
 from src.core.logger import setup_logging
 from src.core.websocket import redis_listener
 from src.routes import (
@@ -72,6 +74,9 @@ if settings.SENTRY_DSN:
 
 logger = setup_logging()
 app = FastAPI(lifespan=lifespan)
+
+app.add_exception_handler(BaseException, local_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
 
 taskiq_fastapi.init(broker, app)
 

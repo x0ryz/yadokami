@@ -1,8 +1,8 @@
 import json
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
-
+from fastapi import APIRouter, Query, Request, Response, status
 from src.core.config import settings
+from src.core.exceptions import AuthError, BadRequestError
 from src.schemas import WebhookEvent
 from src.worker import handle_raw_webhook_task
 
@@ -18,7 +18,7 @@ async def verify_webhook(
     if hub_mode == "subscribe" and hub_verify_token == settings.VERIFY_TOKEN:
         return Response(content=hub_challenge, media_type="text/plain")
 
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
+    raise AuthError(detail="Invalid token")
 
 
 @router.post("")
@@ -26,13 +26,10 @@ async def receive_webhook(request: Request):
     try:
         data = await request.json()
     except json.JSONDecodeError:
-        return Response(status_code=status.HTTP_400_BAD_REQUEST, content="Invalid JSON")
+        return BadRequestError(content="Invalid JSON")
 
     event = WebhookEvent(payload=data)
 
-    try:
-        await handle_raw_webhook_task.kiq(event)
-    except Exception:
-        return Response(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    await handle_raw_webhook_task.kiq(event)
 
     return Response(status_code=status.HTTP_200_OK, content="ok")

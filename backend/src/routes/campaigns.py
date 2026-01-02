@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from loguru import logger
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.core.database import get_session
+from src.core.exceptions import BadRequestError, NotFoundError, ServiceUnavailableError
 from src.core.uow import UnitOfWork
 from src.models import CampaignStatus, get_utc_now
 from src.schemas import (
@@ -40,14 +40,12 @@ async def create_campaign(
     async with uow:
         # Validation
         if data.message_type == "template" and not data.template_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="template_id is required when message_type is 'template'",
+            raise BadRequestError(
+                detail="template_id is required when message_type is 'template'"
             )
 
         if data.message_type == "text" and not data.message_body:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="message_body is required when message_type is 'text'",
             )
 
@@ -55,13 +53,11 @@ async def create_campaign(
         if data.template_id:
             template = await uow.templates.get_by_id(data.template_id)
             if not template:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
+                raise NotFoundError(
                     detail=f"Template with id {data.template_id} not found",
                 )
             if template.status != "APPROVED":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                raise BadRequestError(
                     detail="Template must be APPROVED",
                 )
 
@@ -102,9 +98,7 @@ async def get_campaign(campaign_id: UUID, session: AsyncSession = Depends(get_se
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         return campaign
 
@@ -126,13 +120,10 @@ async def update_campaign(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only update campaigns in DRAFT status",
             )
 
@@ -165,13 +156,10 @@ async def delete_campaign(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status not in [CampaignStatus.DRAFT, CampaignStatus.COMPLETED]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only delete campaigns in DRAFT or COMPLETED status",
             )
 
@@ -197,27 +185,22 @@ async def schedule_campaign(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only schedule campaigns in DRAFT status",
             )
 
         if campaign.total_contacts == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Cannot schedule campaign with no contacts",
             )
 
         # Validate scheduled time is in the future
         now = get_utc_now()
         if data.scheduled_at <= now:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Scheduled time must be in the future",
             )
 
@@ -246,19 +229,15 @@ async def start_campaign_now(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status not in [CampaignStatus.DRAFT, CampaignStatus.SCHEDULED]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only start campaigns in DRAFT or SCHEDULED status",
             )
 
         if campaign.total_contacts == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Cannot start campaign with no contacts",
             )
 
@@ -267,8 +246,7 @@ async def start_campaign_now(
             logger.info(f"Campaign start published: {campaign_id}")
         except Exception as e:
             logger.error(f"Failed to publish campaign start: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            raise ServiceUnavailableError(
                 detail="Failed to start campaign",
             )
 
@@ -289,13 +267,10 @@ async def pause_campaign(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.RUNNING:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only pause running campaigns",
             )
 
@@ -321,13 +296,10 @@ async def resume_campaign(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.PAUSED:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only resume paused campaigns",
             )
 
@@ -336,8 +308,7 @@ async def resume_campaign(
             logger.info(f"Campaign resume published: {campaign_id}")
         except Exception as e:
             logger.error(f"Failed to publish campaign resume: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            raise ServiceUnavailableError(
                 detail="Failed to resume campaign",
             )
 
@@ -357,9 +328,7 @@ async def get_campaign_stats(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         # Calculate progress
         progress = 0.0
@@ -399,9 +368,7 @@ async def get_campaign_contacts(
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         links = await uow.campaign_contacts.get_campaign_contacts(
             campaign_id, limit, offset
@@ -451,14 +418,11 @@ async def import_contacts_from_file(
         # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         # Only allow import for DRAFT campaigns
         if campaign.status != CampaignStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only import contacts to DRAFT campaigns",
             )
 
@@ -474,8 +438,7 @@ async def import_contacts_from_file(
         elif filename.endswith((".xlsx", ".xls")):
             result = await import_service.import_from_excel(campaign_id, content)
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Unsupported file format. Use .csv, .xlsx or .xls",
             )
 
@@ -518,14 +481,11 @@ async def add_contacts_manually(
         # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
         if not campaign:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found"
-            )
+            raise NotFoundError(detail="Campaign not found")
 
         # Only allow import for DRAFT campaigns
         if campaign.status != CampaignStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Can only add contacts to DRAFT campaigns",
             )
 

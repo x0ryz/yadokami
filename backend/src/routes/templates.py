@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.core.database import get_session
+from src.core.exceptions import NotFoundError
 from src.models import Template
 
 router = APIRouter(prefix="/templates", tags=["Templates"])
@@ -31,9 +31,7 @@ async def get_template(template_id: UUID, session: AsyncSession = Depends(get_se
     template = await session.get(Template, template_id)
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
-        )
+        raise NotFoundError(detail="Template not found")
 
     return template
 

@@ -1,12 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import desc, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.core.database import get_session
+from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
 from src.models import Contact, Message, get_utc_now
 from src.schemas import MediaFileResponse, MessageResponse
@@ -74,8 +74,7 @@ async def create_contact(
         # Check if contact already exists
         existing = await uow.contacts.get_by_phone(data.phone_number)
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestError(
                 detail="Contact with this phone number already exists",
             )
 
@@ -99,9 +98,7 @@ async def get_contact(contact_id: UUID, session: AsyncSession = Depends(get_sess
     """Get single contact by ID"""
     contact = await session.get(Contact, contact_id)
     if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
-        )
+        raise NotFoundError(detail="Contact not found")
     return contact
 
 
@@ -117,9 +114,7 @@ async def update_contact(
     """
     contact = await session.get(Contact, contact_id)
     if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
-        )
+        raise NotFoundError(detail="Contact not found")
 
     update_data = data.model_dump(exclude_unset=True)
 
@@ -145,9 +140,7 @@ async def delete_contact(
     """
     contact = await session.get(Contact, contact_id)
     if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
-        )
+        raise NotFoundError(detail="Contact not found")
 
     await session.delete(contact)
     await session.commit()
@@ -162,9 +155,7 @@ async def mark_contact_as_read(
     """
     contact = await session.get(Contact, contact_id)
     if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found"
-        )
+        raise NotFoundError(detail="Contact not found")
 
     contact.unread_count = 0
     contact.updated_at = get_utc_now()
@@ -189,7 +180,7 @@ async def get_chat_history(
     """
     contact = await session.get(Contact, contact_id)
     if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
+        raise NotFoundError(detail="Contact not found")
 
     if contact.unread_count > 0:
         contact.unread_count = 0

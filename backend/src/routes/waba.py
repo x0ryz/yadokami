@@ -1,8 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Request
-from loguru import logger
-
+from src.core.exceptions import ServiceUnavailableError
 from src.schemas import WabaSyncRequest
 from src.worker import handle_account_sync_task
 
@@ -18,7 +17,6 @@ async def trigger_waba_sync(request: Request):
     try:
         await handle_account_sync_task.kiq(sync_request)
     except Exception as e:
-        logger.error(f"Failed to publish to Redis: {e}")
-        return {"status": "error", "detail": "Internal Broker Error"}
+        raise ServiceUnavailableError(detail="Failed to enqueue sync task")
 
     return {"status": "sync_started", "request_id": request_id}
