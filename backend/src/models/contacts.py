@@ -35,5 +35,12 @@ class Contact(SQLModel, table=True):
         default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))
     )
 
-    messages: List["Message"] = Relationship(back_populates="contact")
-    campaign_links: List["CampaignContact"] = Relationship(back_populates="contact")
+    messages: List["Message"] = Relationship(
+        back_populates="contact",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+    campaign_links: List["CampaignContact"] = Relationship(
+        back_populates="contact",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )

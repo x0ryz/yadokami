@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from loguru import logger
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.core.database import get_session
+from src.core.dependencies import get_uow
 from src.core.exceptions import BadRequestError, NotFoundError, ServiceUnavailableError
 from src.core.uow import UnitOfWork
 from src.models import CampaignStatus, get_utc_now
@@ -25,7 +26,8 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 @router.post("", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
 async def create_campaign(
-    data: CampaignCreate, session: AsyncSession = Depends(get_session)
+    data: CampaignCreate,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Create a new campaign.
@@ -35,8 +37,6 @@ async def create_campaign(
     - **template_id**: UUID of template (required if message_type=template)
     - **message_body**: Text body (required if message_type=text)
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         # Validation
         if data.message_type == "template" and not data.template_id:
@@ -76,24 +76,25 @@ async def create_campaign(
 
 
 @router.get("", response_model=list[CampaignResponse])
-async def list_campaigns(session: AsyncSession = Depends(get_session)):
+async def list_campaigns(
+    uow: UnitOfWork = Depends(get_uow),
+):
     """
     List all campaigns.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaigns = await uow.campaigns.get_all()
         return campaigns
 
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
-async def get_campaign(campaign_id: UUID, session: AsyncSession = Depends(get_session)):
+async def get_campaign(
+    campaign_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
+):
     """
     Get campaign by ID.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -107,15 +108,13 @@ async def get_campaign(campaign_id: UUID, session: AsyncSession = Depends(get_se
 async def update_campaign(
     campaign_id: UUID,
     data: CampaignUpdate,
-    session: AsyncSession = Depends(get_session),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Update campaign details.
 
     Only campaigns in DRAFT status can be updated.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -143,15 +142,14 @@ async def update_campaign(
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_campaign(
-    campaign_id: UUID, session: AsyncSession = Depends(get_session)
+    campaign_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Delete a campaign.
 
     Only campaigns in DRAFT status can be deleted.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -172,15 +170,13 @@ async def delete_campaign(
 async def schedule_campaign(
     campaign_id: UUID,
     data: CampaignSchedule,
-    session: AsyncSession = Depends(get_session),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Schedule a campaign to run at a specific time.
 
     Campaign must be in DRAFT status and have contacts.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -216,15 +212,15 @@ async def schedule_campaign(
 
 @router.post("/{campaign_id}/start", response_model=CampaignResponse)
 async def start_campaign_now(
-    campaign_id: UUID, request: Request, session: AsyncSession = Depends(get_session)
+    campaign_id: UUID,
+    request: Request,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Start campaign immediately.
 
     Campaign must be in DRAFT or SCHEDULED status and have contacts.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -256,13 +252,12 @@ async def start_campaign_now(
 
 @router.post("/{campaign_id}/pause", response_model=CampaignResponse)
 async def pause_campaign(
-    campaign_id: UUID, session: AsyncSession = Depends(get_session)
+    campaign_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Pause a running campaign.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -285,13 +280,13 @@ async def pause_campaign(
 
 @router.post("/{campaign_id}/resume", response_model=CampaignResponse)
 async def resume_campaign(
-    campaign_id: UUID, request: Request, session: AsyncSession = Depends(get_session)
+    campaign_id: UUID,
+    request: Request,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Resume a paused campaign.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -317,13 +312,12 @@ async def resume_campaign(
 
 @router.get("/{campaign_id}/stats", response_model=CampaignStats)
 async def get_campaign_stats(
-    campaign_id: UUID, session: AsyncSession = Depends(get_session)
+    campaign_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Get detailed campaign statistics.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -357,13 +351,11 @@ async def get_campaign_contacts(
     campaign_id: UUID,
     limit: int = 100,
     offset: int = 0,
-    session: AsyncSession = Depends(get_session),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Get contacts in a campaign with pagination.
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
 
@@ -395,7 +387,7 @@ async def get_campaign_contacts(
 async def import_contacts_from_file(
     campaign_id: UUID,
     file: UploadFile = File(...),
-    session: AsyncSession = Depends(get_session),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Import contacts from CSV or Excel file.
@@ -412,8 +404,6 @@ async def import_contacts_from_file(
 
     **Supported formats:** .csv, .xlsx, .xls
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
@@ -454,7 +444,7 @@ async def import_contacts_from_file(
 async def add_contacts_manually(
     campaign_id: UUID,
     contacts: list[ContactImport],
-    session: AsyncSession = Depends(get_session),
+    uow: UnitOfWork = Depends(get_uow),
 ):
     """
     Add contacts manually via API (without file upload).
@@ -475,8 +465,6 @@ async def add_contacts_manually(
     ]
     ```
     """
-    uow = UnitOfWork(lambda: session)
-
     async with uow:
         # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
