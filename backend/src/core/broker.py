@@ -1,10 +1,10 @@
 import httpx
+from src.core.config import settings
+from src.core.logger import setup_logging
+from src.core.redis import close_redis, init_redis
 from taskiq import TaskiqEvents, TaskiqScheduler, TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend, RedisScheduleSource
-
-from src.core.config import settings
-from src.core.logger import setup_logging
 
 logger = setup_logging()
 
@@ -38,6 +38,9 @@ async def startup(state: TaskiqState):
         },
     )
     state.http_client = client
+
+    await init_redis()
+
     logger.info("Taskiq Worker started. HTTP Client initialized.")
 
 
@@ -46,4 +49,7 @@ async def shutdown(state: TaskiqState):
     client = getattr(state, "http_client", None)
     if client:
         await client.aclose()
+
+    await close_redis()
+
     logger.info("Taskiq Worker stopped.")

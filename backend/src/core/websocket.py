@@ -3,9 +3,8 @@ import json
 
 from fastapi import WebSocket
 from loguru import logger
-from redis import asyncio as aioredis
-
 from src.core.config import settings
+from src.core.redis import get_redis
 
 
 class ConnectionManager:
@@ -42,12 +41,9 @@ async def redis_listener():
     logger.info("Starting Redis Listener...")
 
     while True:
-        redis = None
         pubsub = None
         try:
-            redis = aioredis.from_url(
-                settings.REDIS_URL, encoding="utf-8", decode_responses=True
-            )
+            redis = get_redis()
             pubsub = redis.pubsub()
             await pubsub.subscribe("ws_updates")
 
@@ -60,7 +56,6 @@ async def redis_listener():
                     try:
                         payload = json.loads(raw_data)
 
-                        # ВИПРАВЛЕНО: перевіряємо і 'event', і 'type'
                         event_name = (
                             payload.get("event") or payload.get("type") or "unknown"
                         )
@@ -81,5 +76,3 @@ async def redis_listener():
         finally:
             if pubsub:
                 await pubsub.close()
-            if redis:
-                await redis.close()

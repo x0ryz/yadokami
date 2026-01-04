@@ -4,6 +4,7 @@ from uuid import UUID
 from loguru import logger
 from redis import asyncio as aioredis
 from src.core.config import settings
+from src.core.redis import get_redis
 from src.models import Message
 from src.schemas.events import (
     BatchProgressEvent,
@@ -15,16 +16,12 @@ from src.schemas.events import (
 
 
 class NotificationService:
-    def __init__(self):
-        self.redis_url = settings.REDIS_URL
-
     async def _publish(self, event_data: dict):
         """Low-level publish to Redis"""
         try:
-            redis = aioredis.from_url(self.redis_url)
+            redis = get_redis()
             message_json = json.dumps(event_data, default=str)
             await redis.publish("ws_updates", message_json)
-            await redis.close()
         except Exception as e:
             logger.error(f"Failed to publish WS update: {e}")
 

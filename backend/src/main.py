@@ -5,13 +5,13 @@ import sentry_sdk
 import taskiq_fastapi
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from redis import asyncio as aioredis
 from src.core.broker import broker
 from src.core.config import settings
 from src.core.database import engine
 from src.core.exceptions import BaseException
 from src.core.handlers import global_exception_handler, local_exception_handler
 from src.core.logger import setup_logging
+from src.core.redis import close_redis, init_redis, redis_client
 from src.core.websocket import redis_listener
 from src.routes import (
     campaigns,
@@ -30,11 +30,9 @@ background_tasks = set()
 async def lifespan(app: FastAPI):
     logger.info("Lifespan: Starting up...")
 
-    redis = aioredis.from_url(
-        settings.REDIS_URL, encoding="utf-8", decode_responses=True
-    )
+    await init_redis()
 
-    app.state.redis = redis
+    app.state.redis = redis_client
     logger.info("Redis pool initialized")
 
     ws_task = asyncio.create_task(redis_listener())
@@ -57,7 +55,7 @@ async def lifespan(app: FastAPI):
     if not broker.is_worker_process:
         await broker.shutdown()
 
-    await app.state.redis.close()
+    await close_redis()
     logger.info("Redis client closed")
 
     await engine.dispose()

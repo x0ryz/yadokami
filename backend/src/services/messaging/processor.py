@@ -114,13 +114,15 @@ class MessageProcessorService:
                     "sticker",
                 ]:
                     await self.media.handle_media_attachment(new_msg.id, msg)
-
                     await self.uow.session.flush()
-                    await self.uow.session.refresh(new_msg, ["media_files"])
+
+                # ВИПРАВЛЕННЯ: refresh викликається завжди, для всіх типів повідомлень
+                await self.uow.session.refresh(new_msg, ["media_files"])
 
                 await self.uow.commit()
 
                 media_dtos = []
+                # Тепер це безпечно, бо media_files завантажено
                 if new_msg.media_files:
                     for mf in new_msg.media_files:
                         url = await self.media.storage.get_presigned_url(mf.r2_key)
