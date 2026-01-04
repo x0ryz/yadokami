@@ -87,8 +87,36 @@ class MessageSenderService:
         await self.uow.session.flush()
         await self.uow.session.refresh(message)
 
+        contact.updated_at = message.created_at
+        contact.last_message_at = message.created_at
+        contact.last_message_id = message.id
+        self.uow.session.add(contact)
+
         if not is_campaign:
             await self.notifier.notify_new_message(message, phone=contact.phone_number)
+
+            preview_body = (
+                body
+                if message_type == "text"
+                else (template_name or f"Sent {message_type}")
+            )
+
+            await self.notifier._publish(
+                {
+                    "event": "contact_updated",
+                    "data": {
+                        "id": str(contact.id),
+                        "phone_number": contact.phone_number,
+                        "unread_count": contact.unread_count,
+                        "last_message_at": contact.last_message_at.isoformat(),
+                        "last_message_body": preview_body,
+                        "last_message_type": message_type,
+                        "last_message_status": "pending",
+                        "last_message_direction": "outbound",
+                    },
+                    "timestamp": message.created_at.isoformat(),
+                }
+            )
 
         try:
             # Send to Meta

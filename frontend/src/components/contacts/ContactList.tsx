@@ -1,48 +1,73 @@
-import React from 'react';
-import { Contact, ContactStatus } from '../../types';
+import React from "react";
+import { Contact, MessageDirection, MessageStatus } from "../../types";
 
 interface ContactListProps {
   contacts: Contact[];
   selectedContact: Contact | null;
   onSelectContact: (contact: Contact) => void;
-  onMarkAsRead: (contactId: string) => void;
 }
 
 const ContactList: React.FC<ContactListProps> = ({
   contacts,
   selectedContact,
   onSelectContact,
-  onMarkAsRead,
 }) => {
-  const getStatusColor = (status: ContactStatus) => {
-    const colors = {
-      [ContactStatus.NEW]: 'bg-blue-100 text-blue-800',
-      [ContactStatus.SENT]: 'bg-yellow-100 text-yellow-800',
-      [ContactStatus.DELIVERED]: 'bg-green-100 text-green-800',
-      [ContactStatus.READ]: 'bg-gray-100 text-gray-800',
-      [ContactStatus.FAILED]: 'bg-red-100 text-red-800',
-      [ContactStatus.OPTED_OUT]: 'bg-orange-100 text-orange-800',
-      [ContactStatus.BLOCKED]: 'bg-red-100 text-red-800',
-      [ContactStatus.SCHEDULED]: 'bg-purple-100 text-purple-800',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
-
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return '';
+    if (!dateString) return "";
     const date = new Date(dateString);
     const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (days === 0) {
-      return date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-    } else if (days === 1) {
-      return 'Вчора';
-    } else if (days < 7) {
-      return `${days} дн. тому`;
+    // Перевірка на "Сьогодні" (порівнюємо календарні дати)
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    // Перевірка на "Вчора"
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday =
+      date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear();
+
+    if (isToday) {
+      return date.toLocaleTimeString("uk-UA", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } else if (isYesterday) {
+      return "Вчора";
     } else {
-      return date.toLocaleDateString('uk-UA');
+      // Якщо більше 7 днів тому - повна дата, інакше - день тижня
+      const diffTime = Math.abs(now.getTime() - date.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 7) {
+        return date.toLocaleDateString("uk-UA", { weekday: "short" });
+      }
+      return date.toLocaleDateString("uk-UA", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+    }
+  };
+
+  const getStatusIcon = (status?: MessageStatus | null) => {
+    if (!status) return null;
+    switch (status) {
+      case MessageStatus.SENT:
+        return <span className="text-gray-400">✓</span>;
+      case MessageStatus.DELIVERED:
+        return <span className="text-gray-400">✓✓</span>;
+      case MessageStatus.READ:
+        return <span className="text-blue-500 font-bold">✓✓</span>; // font-bold для кращої видимості
+      case MessageStatus.FAILED:
+        return <span className="text-red-500">!</span>;
+      case MessageStatus.PENDING:
+        return <span className="text-gray-300">🕒</span>;
+      default:
+        return <span className="text-gray-300">🕒</span>;
     }
   };
 
@@ -57,55 +82,64 @@ const ContactList: React.FC<ContactListProps> = ({
   return (
     <div className="flex-1 overflow-y-auto">
       {contacts.map((contact) => {
-        const tags = contact.tags || [];
+        const isSelected = selectedContact?.id === contact.id;
+        const lastMsgBody = contact.last_message_body;
+        const isOutbound =
+          contact.last_message_direction === MessageDirection.OUTBOUND;
+
         return (
-        <div
-          key={contact.id}
-          onClick={() => onSelectContact(contact)}
-          className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-            selectedContact?.id === contact.id ? 'bg-blue-50 border-blue-200' : ''
-          }`}
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-gray-900 truncate">
-                  {contact.name || contact.phone_number}
-                </h3>
-                {contact.unread_count > 0 && (
-                  <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                    {contact.unread_count}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-gray-600 truncate">{contact.phone_number}</p>
+          <div
+            key={contact.id}
+            onClick={() => onSelectContact(contact)}
+            className={`p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
+              isSelected ? "bg-blue-50 border-blue-200" : ""
+            }`}
+          >
+            <div className="flex justify-between items-baseline mb-1">
+              {/* Ім'я або телефон */}
+              <h3
+                className={`font-semibold text-sm truncate pr-2 ${isSelected ? "text-blue-900" : "text-gray-900"}`}
+              >
+                {contact.name || contact.phone_number}
+              </h3>
+
+              {/* Час останнього повідомлення */}
               {contact.last_message_at && (
-                <p className="text-xs text-gray-500 mt-1">
+                <span
+                  className={`text-xs whitespace-nowrap ${contact.unread_count > 0 ? "text-green-600 font-medium" : "text-gray-400"}`}
+                >
                   {formatDate(contact.last_message_at)}
-                </p>
+                </span>
               )}
             </div>
-            <div className="ml-2 flex flex-col items-end gap-1">
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${getStatusColor(contact.status)}`}
-              >
-                {contact.status}
-              </span>
-              {tags.length > 0 && (
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {tags.slice(0, 2).map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded"
-                    >
-                      {tag}
+
+            <div className="flex justify-between items-center">
+              {/* Прев'ю повідомлення */}
+              <div className="flex-1 min-w-0 flex items-center text-sm text-gray-600 h-5">
+                {isOutbound && (
+                  <span className="mr-1 text-xs flex-shrink-0">
+                    {getStatusIcon(contact.last_message_status)}
+                  </span>
+                )}
+                <p className="truncate">
+                  {lastMsgBody ? (
+                    lastMsgBody
+                  ) : (
+                    <span className="italic text-gray-400">
+                      Немає повідомлень
                     </span>
-                  ))}
-                </div>
+                  )}
+                </p>
+              </div>
+
+              {/* Лічильник непрочитаних */}
+              {contact.unread_count > 0 && (
+                <span className="ml-2 bg-green-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center flex-shrink-0">
+                  {contact.unread_count}
+                </span>
               )}
             </div>
           </div>
-        </div>
         );
       })}
     </div>
@@ -113,4 +147,3 @@ const ContactList: React.FC<ContactListProps> = ({
 };
 
 export default ContactList;
-

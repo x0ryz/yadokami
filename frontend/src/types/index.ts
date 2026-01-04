@@ -50,6 +50,9 @@ export interface Contact {
   tags: string[] | null;
   created_at: string;
   updated_at: string;
+  last_message_body?: string | null;
+  last_message_status?: MessageStatus | null;
+  last_message_direction?: MessageDirection | null;
 }
 
 export interface ContactCreate {

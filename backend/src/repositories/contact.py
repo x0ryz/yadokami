@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import desc, or_, select
 from src.models import Contact, get_utc_now
 from src.repositories.base import BaseRepository
@@ -29,7 +30,8 @@ class ContactRepository(BaseRepository[Contact]):
         """Get contacts sorted by unread count and last activity"""
         stmt = (
             select(Contact)
-            .order_by(desc(Contact.unread_count), desc(Contact.updated_at))
+            .options(selectinload(Contact.last_message))
+            .order_by(desc(Contact.unread_count), desc(Contact.last_message_at))
             .offset(offset)
             .limit(limit)
         )

@@ -5,11 +5,11 @@ Pydantic схеми для контактів.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
-from src.models.base import ContactStatus
+from pydantic import BaseModel, Field, computed_field, field_validator
+from src.models.base import ContactStatus, MessageDirection, MessageStatus
 
 from .base import TimestampMixin, UUIDMixin
 
@@ -95,13 +95,29 @@ class ContactResponse(UUIDMixin, TimestampMixin):
 
 
 class ContactListResponse(BaseModel):
-    """Скорочена інформація для списку"""
-
     id: UUID
     phone_number: str
     name: Optional[str] = None
     unread_count: int
     last_message_at: Optional[datetime] = None
+    last_message: Optional[Any] = Field(default=None, exclude=True)
+
+    @computed_field
+    def last_message_body(self) -> Optional[str]:
+        if not hasattr(self, "last_message") or not self.last_message:
+            return None
+        msg = self.last_message
+        if msg.message_type == "text":
+            return msg.body
+        return f"[{msg.message_type}]"
+
+    @computed_field
+    def last_message_status(self) -> Optional[MessageStatus]:
+        return self.last_message.status if self.last_message else None
+
+    @computed_field
+    def last_message_direction(self) -> Optional[MessageDirection]:
+        return self.last_message.direction if self.last_message else None
 
     class Config:
         from_attributes = True

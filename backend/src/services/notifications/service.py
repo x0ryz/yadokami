@@ -2,8 +2,6 @@ import json
 from uuid import UUID
 
 from loguru import logger
-from redis import asyncio as aioredis
-from src.core.config import settings
 from src.core.redis import get_redis
 from src.models import Message
 from src.schemas.events import (

@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../api';
-import { Contact, MessageResponse, MessageDirection, MessageStatus } from '../types';
-import ContactList from '../components/contacts/ContactList';
-import ChatWindow from '../components/contacts/ChatWindow';
-import { useWSEvent } from '../services/useWebSocket';
-import { EventType } from '../services/websocket';
+import React, { useState, useEffect, useCallback } from "react";
+import { apiClient } from "../api";
+import {
+  Contact,
+  MessageResponse,
+  MessageDirection,
+  MessageStatus,
+} from "../types";
+import ContactList from "../components/contacts/ContactList";
+import ChatWindow from "../components/contacts/ChatWindow";
+import { useWSEvent } from "../services/useWebSocket";
+import { EventType } from "../services/websocket";
 
 const ContactsPage: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -12,132 +17,201 @@ const ContactsPage: React.FC = () => {
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
+  // Завантаження контактів при старті
   useEffect(() => {
     loadContacts();
   }, []);
 
+  // Коли обираємо контакт - завантажуємо повідомлення і скидаємо лічильник локально
   useEffect(() => {
     if (selectedContact) {
+      // 1. Локально скидаємо unread_count (візуально)
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === selectedContact.id ? { ...c, unread_count: 0 } : c,
+        ),
+      );
+
+      // 2. Завантажуємо історію
       loadMessages(selectedContact.id);
     }
   }, [selectedContact]);
 
   // --- WebSocket Handlers ---
 
-  const handleNewMessage = useCallback((data: any) => {
-    console.log('WS: New message received:', data);
-    
-    // 1. Визначаємо номер телефону повідомлення (вхідні мають 'from', вихідні 'phone')
-    const msgPhone = data.phone || data.from || data.phone_number;
-    const msgContactId = data.contact_id;
+  const handleNewMessage = useCallback(
+    (data: any) => {
+      console.log("WS: New message received:", data);
 
-    // 2. Перевіряємо, чи це повідомлення для поточного чату
-    const isForCurrentChat = selectedContact && (
-      (msgContactId && msgContactId === selectedContact.id) ||
-      (msgPhone && msgPhone === selectedContact.phone_number)
-    );
-    
-    if (isForCurrentChat) {
-      setMessages(prev => {
-        if (!Array.isArray(prev)) return [data];
-        // Запобігаємо дублікатам
-        if (prev.some(m => m.id === data.id)) return prev;
+      const msgPhone = data.phone || data.from || data.phone_number;
+      const msgContactId = data.contact_id;
 
-        // Нормалізуємо об'єкт повідомлення (щоб точно відповідав інтерфейсу)
-        const newMessage: MessageResponse = {
+      // Визначаємо тип повідомлення
+      const msgType = data.type || data.message_type || "text";
+      const isMedia = [
+        "image",
+        "video",
+        "document",
+        "audio",
+        "sticker",
+      ].includes(msgType);
+
+      // Перевіряємо, чи це повідомлення для поточного чату
+      const isForCurrentChat =
+        selectedContact &&
+        ((msgContactId && msgContactId === selectedContact.id) ||
+          (msgPhone && msgPhone === selectedContact.phone_number));
+
+      const direction =
+        data.direction ||
+        (data.from ? MessageDirection.INBOUND : MessageDirection.OUTBOUND);
+
+      if (isForCurrentChat) {
+        // 1. ВАЖЛИВО: Якщо це вхідне повідомлення у відкритому чаті - позначаємо як прочитане на бекенді
+        if (direction === MessageDirection.INBOUND) {
+          apiClient.markContactAsRead(selectedContact.id).catch(console.error);
+        }
+
+        // 2. Оновлюємо список повідомлень
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [data];
+          // Запобігаємо дублікатам
+          if (prev.some((m) => m.id === data.id)) return prev;
+
+          const newMessage: MessageResponse = {
             id: data.id,
             wamid: data.wamid,
-            direction: data.direction || (data.from ? MessageDirection.INBOUND : MessageDirection.OUTBOUND),
+            direction: direction,
             status: data.status || MessageStatus.RECEIVED,
-            message_type: data.type || 'text',
+            message_type: msgType,
             body: data.body,
             created_at: data.created_at || new Date().toISOString(),
-            media_files: data.media_files || []
-        };
+            media_files: data.media_files || [],
+          };
 
-        return [...prev, newMessage].sort((a, b) => 
-            new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-        );
-      });
-    }
-    
-    // 3. Оновлюємо список контактів (піднімаємо активний контакт вгору, оновлюємо текст)
-    setContacts(prev => {
-        const updated = prev.map(contact => {
-            const isMatch = (msgContactId && contact.id === msgContactId) || 
-                            (msgPhone && contact.phone_number === msgPhone);
-            
-            if (isMatch) {
-                return {
-                    ...contact,
-                    last_message_at: data.created_at || new Date().toISOString(),
-                    // Якщо чат відкритий - не збільшуємо лічильник непрочитаних
-                    unread_count: isForCurrentChat ? 0 : (contact.unread_count || 0) + 1
-                };
+          return [...prev, newMessage].sort(
+            (a, b) =>
+              new Date(a.created_at || 0).getTime() -
+              new Date(b.created_at || 0).getTime(),
+          );
+        });
+
+        // ХАК: Якщо це медіа, але файлів немає (бекенд ще качає) - оновлюємо чат через 2 сек
+        if (isMedia && (!data.media_files || data.media_files.length === 0)) {
+          console.log("WS: Media message without files. Scheduling refresh...");
+          setTimeout(() => {
+            if (selectedContact) {
+              loadMessages(selectedContact.id);
             }
-            return contact;
-        });
-        // Сортуємо: контакти з найновішими повідомленнями зверху
-        return updated.sort((a, b) => {
-            const dateA = new Date(a.last_message_at || 0).getTime();
-            const dateB = new Date(b.last_message_at || 0).getTime();
-            return dateB - dateA;
-        });
-    });
+          }, 2000);
+        }
+      }
 
-    // Якщо прийшло повідомлення від нового контакту, якого немає в списку - перезавантажуємо список
-    // (опціонально, можна додати логіку додавання в список без перезавантаження)
-  }, [selectedContact]);
+      // 3. Оновлюємо список контактів (прев'ю, час, лічильник)
+      setContacts((prev) => {
+        const updated = prev.map((contact) => {
+          const isMatch =
+            (msgContactId && contact.id === msgContactId) ||
+            (msgPhone && contact.phone_number === msgPhone);
+
+          if (isMatch) {
+            return {
+              ...contact,
+              last_message_at: data.created_at || new Date().toISOString(),
+              last_message_body:
+                data.body || (isMedia ? `[${msgType}]` : data.body),
+              last_message_status: data.status,
+              last_message_direction: direction,
+              // Якщо чат відкритий - не збільшуємо лічильник
+              unread_count: isForCurrentChat
+                ? 0
+                : (contact.unread_count || 0) + 1,
+            };
+          }
+          return contact;
+        });
+
+        // Сортуємо: нові зверху
+        return updated.sort((a, b) => {
+          const dateA = new Date(a.last_message_at || 0).getTime();
+          const dateB = new Date(b.last_message_at || 0).getTime();
+          return dateB - dateA;
+        });
+      });
+    },
+    [selectedContact],
+  );
 
   const handleMessageStatusUpdate = useCallback((data: any) => {
-    console.log('WS: Status update:', data);
-    
-    // Отримуємо новий статус (підтримуємо різні формати API)
+    // 1. Отримуємо новий статус
     const newStatus = data.new_status || data.status;
     if (!newStatus) return;
 
-    setMessages(prev => {
+    // 2. Оновлюємо статус повідомлення в чаті
+    setMessages((prev) => {
       if (!Array.isArray(prev)) return [];
-      return prev.map(msg => {
-        // Шукаємо повідомлення за ID або WAMID
-        const isMatch = (data.id && msg.id === data.id) || 
-                        (data.message_id && msg.id === data.message_id) ||
-                        (data.wamid && msg.wamid === data.wamid);
+      return prev.map((msg) => {
+        const isMatch =
+          (data.id && msg.id === data.id) ||
+          (data.message_id && msg.id === data.message_id) ||
+          (data.wamid && msg.wamid === data.wamid);
 
         if (isMatch) {
-          return { 
-              ...msg, 
-              status: newStatus,
-              // Оновлюємо WAMID, якщо він прийшов (важливо для наступних апдейтів)
-              wamid: data.wamid || msg.wamid 
+          return {
+            ...msg,
+            status: newStatus,
+            wamid: data.wamid || msg.wamid,
           };
         }
         return msg;
       });
     });
+
+    // 3. Оновлюємо статус останнього повідомлення в списку контактів
+    setContacts((prev) =>
+      prev.map((contact) => {
+        const isContactMatch =
+          data.contact_id && contact.id === data.contact_id;
+        const isPhoneMatch = data.phone && contact.phone_number === data.phone;
+
+        if (isContactMatch || isPhoneMatch) {
+          return {
+            ...contact,
+            last_message_status: newStatus,
+          };
+        }
+        return contact;
+      }),
+    );
   }, []);
 
-  const handleContactUnreadChanged = useCallback((data: any) => {
-    setContacts(prev => prev.map(contact => {
-      if (contact.id === data.contact_id) {
-        return { ...contact, unread_count: data.unread_count };
-      }
-      return contact;
-    }));
-  }, []);
+  const handleContactUnreadChanged = useCallback(
+    (data: any) => {
+      setContacts((prev) =>
+        prev.map((contact) => {
+          if (contact.id === data.contact_id) {
+            // Якщо це поточний активний контакт - ігноруємо збільшення лічильника (або ставимо 0)
+            if (selectedContact && selectedContact.id === contact.id) {
+              return { ...contact, unread_count: 0 };
+            }
+            return { ...contact, unread_count: data.unread_count };
+          }
+          return contact;
+        }),
+      );
+    },
+    [selectedContact],
+  );
 
   // Підписки на події
   useWSEvent(EventType.NEW_MESSAGE, handleNewMessage);
-  // Додаємо STATUS_UPDATE, бо саме його часто шле бекенд
   useWSEvent(EventType.STATUS_UPDATE, handleMessageStatusUpdate);
-  // Залишаємо специфічні події про всяк випадок
   useWSEvent(EventType.MESSAGE_SENT, handleMessageStatusUpdate);
   useWSEvent(EventType.MESSAGE_DELIVERED, handleMessageStatusUpdate);
   useWSEvent(EventType.MESSAGE_READ, handleMessageStatusUpdate);
   useWSEvent(EventType.MESSAGE_FAILED, handleMessageStatusUpdate);
-  
   useWSEvent(EventType.CONTACT_UNREAD_CHANGED, handleContactUnreadChanged);
 
   // --- API Calls ---
@@ -148,7 +222,7 @@ const ContactsPage: React.FC = () => {
       const data = await apiClient.getContacts();
       setContacts(Array.isArray(data) ? data : []);
     } catch (error: any) {
-      console.error('Помилка завантаження контактів:', error);
+      console.error("Помилка завантаження контактів:", error);
     } finally {
       setLoading(false);
     }
@@ -160,7 +234,7 @@ const ContactsPage: React.FC = () => {
       const data = await apiClient.getChatHistory(contactId);
       setMessages(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Помилка завантаження повідомлень:', error);
+      console.error("Помилка завантаження повідомлень:", error);
       setMessages([]);
     } finally {
       setMessagesLoading(false);
@@ -177,30 +251,19 @@ const ContactsPage: React.FC = () => {
       const results = await apiClient.searchContacts({ q: searchQuery });
       setContacts(Array.isArray(results) ? results : []);
     } catch (error) {
-      console.error('Помилка пошуку:', error);
+      console.error("Помилка пошуку:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMarkAsRead = async (contactId: string) => {
-    try {
-      await apiClient.markContactAsRead(contactId);
-      setContacts(prev => prev.map(contact => 
-        contact.id === contactId ? { ...contact, unread_count: 0 } : contact
-      ));
-    } catch (error) {
-      console.error('Помилка позначення як прочитане:', error);
-    }
-  };
-
   const handleSendMessage = async (phone: string, text: string) => {
     try {
-      await apiClient.sendMessage({ phone, text, type: 'text' });
-      // Не додаємо вручну, чекаємо WebSocket події (outbound message)
+      await apiClient.sendMessage({ phone, text, type: "text" });
+      // Повідомлення додасться через WebSocket (handleNewMessage)
     } catch (error) {
-      console.error('Помилка відправки повідомлення:', error);
-      alert('Не вдалося відправити повідомлення');
+      console.error("Помилка відправки повідомлення:", error);
+      alert("Не вдалося відправити повідомлення");
     }
   };
 
@@ -213,7 +276,7 @@ const ContactsPage: React.FC = () => {
             placeholder="Пошук контактів..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            onKeyPress={(e) => e.key === "Enter" && handleSearch()}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -239,7 +302,6 @@ const ContactsPage: React.FC = () => {
               contacts={contacts}
               selectedContact={selectedContact}
               onSelectContact={setSelectedContact}
-              onMarkAsRead={handleMarkAsRead}
             />
           )}
         </div>

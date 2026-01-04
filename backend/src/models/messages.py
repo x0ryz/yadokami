@@ -60,5 +60,8 @@ class Message(SQLModel, table=True):
         default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))
     )
 
-    contact: Optional["Contact"] = Relationship(back_populates="messages")
+    contact: Optional["Contact"] = Relationship(
+        back_populates="messages",
+        sa_relationship_kwargs={"foreign_keys": "[Message.contact_id]"},
+    )
     waba_phone: Optional["WabaPhoneNumber"] = Relationship(back_populates="messages")

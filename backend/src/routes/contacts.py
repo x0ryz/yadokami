@@ -14,6 +14,7 @@ from src.schemas.contacts import (
 )
 from src.services.media.storage import StorageService
 from src.services.messaging.chat import ChatService
+from src.services.notifications.service import NotificationService
 
 router = APIRouter(tags=["Contacts"])
 
@@ -88,24 +89,6 @@ async def delete_contact(contact_id: UUID, uow: UnitOfWork = Depends(get_uow)):
         await uow.commit()
 
 
-@router.post("/contacts/{contact_id}/mark-read", response_model=Contact)
-async def mark_contact_as_read(contact_id: UUID, uow: UnitOfWork = Depends(get_uow)):
-    """Mark all messages from this contact as read."""
-    async with uow:
-        contact = await uow.contacts.get_by_id(contact_id)
-        if not contact:
-            raise NotFoundError(detail="Contact not found")
-
-        contact.unread_count = 0
-        contact.updated_at = get_utc_now()
-
-        uow.contacts.add(contact)
-        await uow.commit()
-        await uow.session.refresh(contact)
-
-        return contact
-
-
 @router.get("/contacts/{contact_id}/messages", response_model=list[MessageResponse])
 async def get_chat_history(
     contact_id: UUID,
@@ -114,8 +97,19 @@ async def get_chat_history(
     uow: UnitOfWork = Depends(get_uow),
 ):
     """Get chat history with a contact."""
-    storage = StorageService()
-    chat_service = ChatService(uow, storage)
+    notifier = NotificationService()
+    chat_service = ChatService(uow, notifier)
 
     messages = await chat_service.get_chat_history(contact_id, limit, offset)
     return messages
+
+
+@router.post("/contacts/{contact_id}/read", status_code=204)
+async def mark_contact_read(
+    contact_id: UUID,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    """Mark all messages from a contact as read."""
+    notifier = NotificationService()
+    chat_service = ChatService(uow, notifier)
+    await chat_service.mark_conversation_as_read(contact_id)

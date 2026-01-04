@@ -10,8 +10,8 @@ export function RealtimeContactList() {
       prev.map((c) =>
         c.id === data.contact_id
           ? { ...c, unread_count: data.unread_count }
-          : c
-      )
+          : c,
+      ),
     );
   }, []);
 

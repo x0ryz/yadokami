@@ -21,6 +21,11 @@ class Contact(SQLModel, table=True):
     unread_count: int = Field(default=0)
 
     status: ContactStatus = Field(default=ContactStatus.NEW)
+
+    last_message_id: Optional[UUID] = Field(
+        default=None, foreign_key="messages.id", nullable=True
+    )
+
     last_message_at: Optional[datetime] = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
@@ -35,9 +40,16 @@ class Contact(SQLModel, table=True):
         default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))
     )
 
+    last_message: Optional["Message"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "Contact.last_message_id"}
+    )
+
     messages: List["Message"] = Relationship(
         back_populates="contact",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "foreign_keys": "[Message.contact_id]",
+        },
     )
 
     campaign_links: List["CampaignContact"] = Relationship(

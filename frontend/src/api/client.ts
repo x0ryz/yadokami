@@ -91,11 +91,8 @@ export class ApiClient {
     await this.client.delete(`/contacts/${contactId}`);
   }
 
-  async markContactAsRead(contactId: string): Promise<Contact> {
-    const response = await this.client.post<Contact>(
-      `/contacts/${contactId}/mark-read`,
-    );
-    return response.data;
+  async markContactAsRead(contactId: string): Promise<void> {
+    await this.client.post(`/contacts/${contactId}/read`);
   }
 
   async getChatHistory(

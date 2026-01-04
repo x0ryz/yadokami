@@ -81,9 +81,9 @@ class MessageProcessorService:
                     continue
 
                 contact = await self.uow.contacts.get_or_create(msg.from_)
+
                 contact.unread_count += 1
                 contact.updated_at = get_utc_now()
-                self.uow.session.add(contact)
 
                 body = None
                 if msg.type == "text":
@@ -105,6 +105,10 @@ class MessageProcessorService:
 
                 await self.uow.session.flush()
 
+                contact.last_message_id = new_msg.id
+                contact.last_message_at = new_msg.created_at
+                self.uow.session.add(contact)
+
                 if msg.type in [
                     "image",
                     "video",
@@ -122,7 +126,6 @@ class MessageProcessorService:
                 await self.uow.commit()
 
                 media_dtos = []
-                # Тепер це безпечно, бо media_files завантажено
                 if new_msg.media_files:
                     for mf in new_msg.media_files:
                         url = await self.media.storage.get_presigned_url(mf.r2_key)
@@ -142,13 +145,19 @@ class MessageProcessorService:
                     media_files=media_dtos,
                 )
 
+                preview_body = body if body else f"Sent {msg.type}"
+
                 await self.notifier._publish(
                     {
-                        "event": "contact_unread_changed",
+                        "event": "contact_updated",
                         "data": {
-                            "contact_id": str(contact.id),
-                            "phone": contact.phone_number,
+                            "id": str(contact.id),
+                            "phone_number": contact.phone_number,
                             "unread_count": contact.unread_count,
+                            "last_message_at": contact.last_message_at.isoformat(),
+                            "last_message_body": preview_body,
+                            "last_message_type": msg.type,
+                            "last_message_status": "received",
                         },
                         "timestamp": get_utc_now().isoformat(),
                     }
