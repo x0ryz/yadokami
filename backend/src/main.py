@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -22,8 +23,12 @@ from src.routes import (
     waba,
     webhooks,
 )
+from src.schemas.waba import WabaSyncRequest
+from src.worker import handle_account_sync_task
 
 background_tasks = set()
+
+logger = setup_logging()
 
 
 @asynccontextmanager
@@ -41,6 +46,16 @@ async def lifespan(app: FastAPI):
 
     if not broker.is_worker_process:
         await broker.startup()
+
+        try:
+            request_id = str(uuid.uuid4())
+            logger.info(f"Auto-triggering WABA sync on startup. ID: {request_id}")
+
+            sync_request = WabaSyncRequest(request_id=request_id)
+            await handle_account_sync_task.kiq(sync_request)
+
+        except Exception as e:
+            logger.error(f"Failed to auto-trigger WABA sync: {e}")
 
     yield
 
@@ -69,8 +84,6 @@ if settings.SENTRY_DSN:
         enable_logs=True,
     )
 
-
-logger = setup_logging()
 app = FastAPI(lifespan=lifespan)
 
 app.add_exception_handler(BaseException, local_exception_handler)

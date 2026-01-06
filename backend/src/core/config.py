@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     REDIS_URL: str
 
     META_URL: str
-    META_PHONE_ID: str
     META_TOKEN: str
     VERIFY_TOKEN: str
     META_APP_SECRET: str

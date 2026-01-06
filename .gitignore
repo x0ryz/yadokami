@@ -2,4 +2,7 @@
 .env.local
 .env.*
 
+.idea
+.code
+
 letsencrypt/
