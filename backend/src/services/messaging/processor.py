@@ -1,10 +1,8 @@
 import base64
-import binascii
-from typing import Optional
 
 from loguru import logger
 from src.core.uow import UnitOfWork
-from src.models import Message, MessageDirection, MessageStatus, get_utc_now
+from src.models import MessageDirection, MessageStatus, get_utc_now
 from src.schemas import MetaMessage, MetaStatus, MetaWebhookPayload
 from src.services.media.service import MediaService
 from src.services.notifications.service import NotificationService

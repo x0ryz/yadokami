@@ -120,14 +120,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             const repliedMessage = getReplyingToMessage(
               message.reply_to_message_id,
             );
+            const hasReaction = !!message.reaction;
+
+            // Збільшуємо нижній відступ, якщо є реакція, щоб звільнити для неї місце
+            const paddingClass = hasReaction ? "pt-2 pb-5 px-3" : "py-2 px-3";
 
             return (
               <div
                 key={message.id}
-                className={`flex ${isOutbound ? "justify-end" : "justify-start"} group mb-1`}
+                // Додаємо mb-4 якщо є реакція, щоб наступне повідомлення не налалило на неї, інакше mb-1
+                className={`flex ${isOutbound ? "justify-end" : "justify-start"} group ${hasReaction ? "mb-4" : "mb-1"}`}
               >
                 <div
-                  className={`relative max-w-[85%] lg:max-w-[70%] px-3 py-2 rounded-lg shadow-sm text-sm leading-relaxed
+                  className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-lg shadow-sm text-sm leading-relaxed
                     ${
                       isOutbound
                         ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
