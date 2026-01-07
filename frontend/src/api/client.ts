@@ -123,6 +123,30 @@ export class ApiClient {
     return response.data;
   }
 
+  async sendMediaMessage(
+    phone: string,
+    file: File,
+    caption?: string,
+  ): Promise<MessageSendResponse> {
+    const formData = new FormData();
+    formData.append("phone_number", phone);
+    formData.append("file", file);
+    if (caption) {
+      formData.append("caption", caption);
+    }
+
+    const response = await this.client.post<MessageSendResponse>(
+      "/messages/media",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+    return response.data;
+  }
+
   // WABA
   async triggerWabaSync(): Promise<any> {
     const response = await this.client.post("/waba/sync");

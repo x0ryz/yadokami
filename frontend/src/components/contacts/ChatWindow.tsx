@@ -11,6 +11,8 @@ interface ChatWindowProps {
   messages: MessageResponse[];
   loading: boolean;
   onSendMessage: (phone: string, text: string, replyToId?: string) => void;
+  // Додаємо новий проп
+  onSendMedia: (phone: string, file: File, caption?: string) => void;
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -18,18 +20,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   messages = [],
   loading,
   onSendMessage,
+  onSendMedia,
 }) => {
   const [messageText, setMessageText] = useState("");
   const [replyTo, setReplyTo] = useState<MessageResponse | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Стейт для файлу
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // Ref для інпуту файлу
 
   useEffect(() => {
     scrollToBottom("auto");
+    setSelectedFile(null); // Скидаємо файл при зміні контакту
+    setMessageText("");
   }, [contact.id]);
 
   useEffect(() => {
     scrollToBottom("smooth");
-  }, [messages, replyTo]); // Scroll when messages change or reply mode is toggled
+  }, [messages, replyTo, selectedFile]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
@@ -38,10 +45,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   const handleSend = () => {
-    if (messageText.trim()) {
+    if (selectedFile) {
+      // Відправка медіа
+      onSendMedia(contact.phone_number, selectedFile, messageText);
+      setSelectedFile(null);
+      setMessageText("");
+      setReplyTo(null);
+    } else if (messageText.trim()) {
+      // Відправка тексту
       onSendMessage(contact.phone_number, messageText, replyTo?.id);
       setMessageText("");
       setReplyTo(null);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
     }
   };
 
@@ -75,7 +95,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return "text-blue-200";
   };
 
-  // Helper to find the message being replied to
   const getReplyingToMessage = (replyId: string | null | undefined) => {
     if (!replyId) return null;
     return messages.find((m) => m.id === replyId);
@@ -83,8 +102,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
-      {" "}
-      {/* WhatsApp-like background color */}
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-10">
         <div>
@@ -104,6 +121,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           ))}
         </div>
       </div>
+
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
         {loading ? (
@@ -121,14 +139,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               message.reply_to_message_id,
             );
             const hasReaction = !!message.reaction;
-
-            // Збільшуємо нижній відступ, якщо є реакція, щоб звільнити для неї місце
             const paddingClass = hasReaction ? "pt-2 pb-5 px-3" : "py-2 px-3";
 
             return (
               <div
                 key={message.id}
-                // Додаємо mb-4 якщо є реакція, щоб наступне повідомлення не налалило на неї, інакше mb-1
                 className={`flex ${isOutbound ? "justify-end" : "justify-start"} group ${hasReaction ? "mb-4" : "mb-1"}`}
               >
                 <div
@@ -139,7 +154,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         : "bg-white text-gray-900 rounded-tl-none"
                     }`}
                 >
-                  {/* Reply Context Bubble */}
                   {repliedMessage && (
                     <div
                       className={`mb-2 p-2 rounded border-l-4 text-xs cursor-pointer opacity-80
@@ -165,15 +179,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     </div>
                   )}
 
-                  {/* Message Body */}
                   <div id={`msg-${message.id}`}>
-                    {message.body && (
-                      <div className="whitespace-pre-wrap">{message.body}</div>
-                    )}
-
                     {/* Media Files */}
                     {message.media_files?.length > 0 && (
-                      <div className="mt-2 grid gap-1">
+                      <div className="mb-2 grid gap-1">
                         {message.media_files.map((media) => (
                           <div
                             key={media.id}
@@ -191,18 +200,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                 href={media.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2 p-2 bg-black/5 rounded hover:bg-black/10 transition"
+                                className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
                               >
-                                <span>📎</span> {media.file_name}
+                                <span className="text-xl">📎</span>
+                                <span className="underline decoration-dotted">
+                                  {media.file_name}
+                                </span>
                               </a>
                             )}
                           </div>
                         ))}
                       </div>
                     )}
+
+                    {message.body && (
+                      <div className="whitespace-pre-wrap">{message.body}</div>
+                    )}
                   </div>
 
-                  {/* Metadata: Time & Status */}
                   <div className="flex items-center justify-end gap-1 mt-1 select-none">
                     <span className="text-[10px] text-gray-500">
                       {formatMessageTime(message.created_at)}
@@ -216,7 +231,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     )}
                   </div>
 
-                  {/* Reaction Bubble (Absolute positioned) */}
                   {message.reaction && (
                     <div
                       className={`absolute -bottom-3 ${isOutbound ? "right-0" : "left-0"}
@@ -226,7 +240,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     </div>
                   )}
 
-                  {/* Reply Action Button (Visible on Hover) */}
                   <button
                     onClick={() => setReplyTo(message)}
                     className={`absolute top-0 ${isOutbound ? "-left-8" : "-right-8"}
@@ -242,10 +255,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+
       {/* Input Area */}
       <div className="bg-gray-100 p-2">
-        {/* Reply Preview Panel */}
-        {replyTo && (
+        {/* Reply Preview */}
+        {replyTo && !selectedFile && (
           <div className="flex justify-between items-center bg-white p-2 mb-2 rounded-lg border-l-4 border-blue-500 shadow-sm mx-2">
             <div className="text-sm overflow-hidden">
               <span className="text-blue-600 font-semibold text-xs block mb-0.5">
@@ -267,7 +281,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           </div>
         )}
 
+        {/* File Preview */}
+        {selectedFile && (
+          <div className="flex justify-between items-center bg-white p-2 mb-2 rounded-lg border-l-4 border-green-500 shadow-sm mx-2">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="bg-gray-100 p-2 rounded text-xl">📎</div>
+              <div className="text-sm">
+                <span className="font-semibold text-gray-700 block">
+                  Відправка файлу:
+                </span>
+                <span className="text-gray-500 truncate block max-w-[200px]">
+                  {selectedFile.name}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+              className="text-gray-400 hover:text-gray-600 p-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-2 items-end bg-white p-2 rounded-2xl border border-gray-200 shadow-sm">
+          {/* File Input Hidden */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileSelect}
+            // Можна додати accept="..." для обмеження типів
+          />
+
+          {/* Attachment Button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center"
+            title="Прикріпити файл"
+          >
+            🔗
+          </button>
+
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
@@ -277,14 +335,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 handleSend();
               }
             }}
-            placeholder="Написати повідомлення..."
+            placeholder={
+              selectedFile ? "Додати підпис..." : "Написати повідомлення..."
+            }
             className="flex-1 max-h-32 px-2 py-2 bg-transparent outline-none text-gray-800 placeholder-gray-400 overflow-y-auto resize-none"
             rows={1}
             style={{ minHeight: "40px" }}
           />
           <button
             onClick={handleSend}
-            disabled={!messageText.trim()}
+            disabled={!messageText.trim() && !selectedFile}
             className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex-shrink-0 w-10 h-10 flex items-center justify-center"
           >
             ➤

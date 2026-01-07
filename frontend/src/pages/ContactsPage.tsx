@@ -291,6 +291,21 @@ const ContactsPage: React.FC = () => {
     }
   };
 
+  const handleSendMedia = async (
+    phone: string,
+    file: File,
+    caption?: string,
+  ) => {
+    try {
+      await apiClient.sendMediaMessage(phone, file, caption);
+      // Повідомлення з'явиться через WebSocket, так само як і текстове
+      // Можна додати тост "Файл завантажується..."
+    } catch (error) {
+      console.error("Помилка відправки медіа:", error);
+      alert("Не вдалося відправити файл");
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="mb-4">
@@ -337,6 +352,7 @@ const ContactsPage: React.FC = () => {
               messages={messages}
               loading={messagesLoading}
               onSendMessage={handleSendMessage}
+              onSendMedia={handleSendMedia}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500">
