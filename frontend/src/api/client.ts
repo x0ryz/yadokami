@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
 import { config } from "../config/env";
 import {
   Contact,
+  ContactListResponse, // Переконайтеся, що цей тип експортується з types
   ContactCreate,
   ContactUpdate,
   ContactImport,
@@ -22,13 +23,16 @@ import {
   SearchContactsParams,
   SendMessageParams,
   WebhookVerifyParams,
+  TagCreate,
+  TagUpdate, // Додано TagUpdate
+  Tag,
 } from "../types";
 
 export class ApiClient {
   private client: AxiosInstance;
 
   constructor(
-    baseURL: string = "https://dev.x0ryz.cc",
+    baseURL: string = config.apiUrl || "https://dev.x0ryz.cc",
     config?: AxiosRequestConfig,
   ) {
     this.client = axios.create({
@@ -37,6 +41,19 @@ export class ApiClient {
         "Content-Type": "application/json",
       },
       ...config,
+      // ВАЖЛИВО: Кастомна серіалізація параметрів для підтримки FastAPI (tags=1&tags=2)
+      paramsSerializer: (params) => {
+        const searchParams = new URLSearchParams();
+        for (const key in params) {
+          const value = params[key];
+          if (Array.isArray(value)) {
+            value.forEach((v) => searchParams.append(key, v));
+          } else if (value !== undefined && value !== null) {
+            searchParams.append(key, value);
+          }
+        }
+        return searchParams.toString();
+      },
     });
 
     this.client.interceptors.response.use(
@@ -57,8 +74,18 @@ export class ApiClient {
   }
 
   // Contacts
-  async getContacts(): Promise<Contact[]> {
-    const response = await this.client.get<Contact[]>("/contacts");
+  async getContacts(
+    limit = 50,
+    offset = 0,
+    tags?: string[],
+  ): Promise<ContactListResponse[]> {
+    const response = await this.client.get<ContactListResponse[]>("/contacts", {
+      params: {
+        limit,
+        offset,
+        tags, // Тепер це буде серіалізовано як tags=id1&tags=id2
+      },
+    });
     return response.data;
   }
 
@@ -67,8 +94,13 @@ export class ApiClient {
     return response.data;
   }
 
-  async searchContacts(params: SearchContactsParams): Promise<any> {
-    const response = await this.client.get("/contacts/search", { params });
+  async searchContacts(
+    params: SearchContactsParams,
+  ): Promise<ContactListResponse[]> {
+    const response = await this.client.get<ContactListResponse[]>(
+      "/contacts/search",
+      { params },
+    );
     return response.data;
   }
 
@@ -144,6 +176,26 @@ export class ApiClient {
         },
       },
     );
+    return response.data;
+  }
+
+  // Tags
+  async getTags(): Promise<Tag[]> {
+    const response = await this.client.get<Tag[]>("/tags");
+    return response.data;
+  }
+
+  async createTag(data: TagCreate): Promise<Tag> {
+    const response = await this.client.post<Tag>("/tags", data);
+    return response.data;
+  }
+
+  async deleteTag(tagId: string): Promise<void> {
+    await this.client.delete(`/tags/${tagId}`);
+  }
+
+  async updateTag(tagId: string, data: TagUpdate): Promise<Tag> {
+    const response = await this.client.patch<Tag>(`/tags/${tagId}`, data);
     return response.data;
   }
 
@@ -331,5 +383,4 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient(config.apiUrl);
-
 export default apiClient;

@@ -34,3 +34,16 @@ class TagRepository:
         tag = await self.get_by_id(tag_id)
         if tag:
             await self.session.delete(tag)
+
+    async def update(self, tag_id: UUID, data: dict) -> Tag | None:
+        tag = await self.get_by_id(tag_id)
+        if not tag:
+            return None
+
+        for key, value in data.items():
+            if value is not None:
+                setattr(tag, key, value)
+
+        self.session.add(tag)
+        await self.session.flush()
+        return tag

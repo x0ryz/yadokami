@@ -21,11 +21,12 @@ router = APIRouter(tags=["Contacts"])
 async def get_contacts(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    tags: list[UUID] = Query(default=None),
     uow: UnitOfWork = Depends(get_uow),
 ):
     """Get all contacts sorted by unread count and last activity"""
     async with uow:
-        contacts = await uow.contacts.get_paginated(limit, offset)
+        contacts = await uow.contacts.get_paginated(limit, offset, tag_ids=tags)
         return contacts
 
 

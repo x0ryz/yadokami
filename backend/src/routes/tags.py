@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from src.core.dependencies import get_uow
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
-from src.schemas.tags import TagCreate, TagResponse
+from src.schemas.tags import TagCreate, TagResponse, TagUpdate
 
 router = APIRouter(tags=["Tags"])
 
@@ -38,3 +38,18 @@ async def delete_tag(tag_id: UUID, uow: UnitOfWork = Depends(get_uow)):
 
         await uow.tags.delete(tag_id)
         await uow.commit()
+
+
+@router.patch("/tags/{tag_id}", response_model=TagResponse)
+async def update_tag(tag_id: UUID, data: TagUpdate, uow: UnitOfWork = Depends(get_uow)):
+    """Update a tag"""
+    async with uow:
+        update_data = data.model_dump(exclude_unset=True)
+
+        tag = await uow.tags.update(tag_id, update_data)
+        if not tag:
+            raise NotFoundError(detail="Tag not found")
+
+        await uow.commit()
+        await uow.session.refresh(tag)
+        return tag

@@ -32,15 +32,26 @@ class ContactRepository(BaseRepository[Contact]):
             await self.session.flush()
         return contact
 
-    async def get_paginated(self, limit: int, offset: int) -> list[Contact]:
+    async def get_paginated(
+        self, limit: int, offset: int, tag_ids: list[UUID] | None = None
+    ) -> list[Contact]:
         """Get contacts sorted by unread count and last activity"""
+
+        stmt = select(Contact).options(
+            selectinload(Contact.last_message), selectinload(Contact.tags)
+        )
+
+        if tag_ids:
+            stmt = stmt.where(Contact.tags.any(Tag.id.in_(tag_ids)))
+
         stmt = (
-            select(Contact)
-            .options(selectinload(Contact.last_message), selectinload(Contact.tags))
-            .order_by(desc(Contact.unread_count), desc(Contact.last_message_at))
+            stmt.order_by(
+                desc(Contact.unread_count), desc(Contact.last_message_at).nulls_last()
+            )
             .offset(offset)
             .limit(limit)
         )
+
         return (await self.session.exec(stmt)).all()
 
     async def search(self, q: str, limit: int) -> list[Contact]:
@@ -67,33 +78,24 @@ class ContactRepository(BaseRepository[Contact]):
         return contact
 
     async def update(self, contact_id: UUID, data: ContactUpdate) -> Contact | None:
-        # Важливо: завантажуємо контакт разом з існуючими тегами,
-        # щоб коректно працював механізм відстеження змін сесії
         contact = await self.get_by_id(contact_id)
         if not contact:
             return None
 
         update_data = data.model_dump(exclude_unset=True)
 
-        # 1. Перевіряємо, чи є tag_ids у даних для оновлення
         if "tag_ids" in update_data:
-            tag_ids = update_data.pop(
-                "tag_ids"
-            )  # Видаляємо зі словника, щоб не ламав sqlmodel_update
+            tag_ids = update_data.pop("tag_ids")
 
-            # 2. Якщо список порожній - очищаємо теги
             if not tag_ids:
                 contact.tags = []
             else:
-                # 3. Знаходимо об'єкти тегів у базі
                 tags_query = select(Tag).where(Tag.id.in_(tag_ids))
                 tags_result = await self.session.exec(tags_query)
                 new_tags = tags_result.all()
 
-                # 4. Присвоюємо нові об'єкти (SQLAlchemy сам розбереться, що додати/видалити в проміжній таблиці)
                 contact.tags = list(new_tags)
 
-        # Оновлюємо решту скалярних полів (name, email тощо)
         contact.sqlmodel_update(update_data)
 
         contact.updated_at = get_utc_now()

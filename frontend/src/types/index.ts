@@ -38,11 +38,21 @@ export enum MessageType {
   TEMPLATE = "template",
 }
 
-// Contact Types
+// Tag Types
 export interface Tag {
   id: string;
   name: string;
   color: string;
+}
+
+export interface TagCreate {
+  name: string;
+  color: string;
+}
+
+export interface TagUpdate {
+  name?: string;
+  color?: string;
 }
 
 // Contact Types
@@ -54,7 +64,6 @@ export interface Contact {
   status: ContactStatus;
   last_message_at: string | null;
   source: string | null;
-  // ЗМІНА: tags тепер масив об'єктів Tag, а не рядків
   tags: Tag[];
   created_at: string;
   updated_at: string;
@@ -63,16 +72,18 @@ export interface Contact {
   last_message_direction?: MessageDirection | null;
 }
 
-// Для створення ми відправляємо ID тегів
+// Alias for list response if it matches Contact
+export type ContactListResponse = Contact;
+
 export interface ContactCreate {
   phone_number: string;
   name?: string | null;
-  tag_ids?: string[]; // Змінено з tags на tag_ids згідно з бекендом
+  tag_ids?: string[];
 }
 
 export interface ContactUpdate {
   name?: string | null;
-  tag_ids?: string[] | null; // Змінено з tags на tag_ids
+  tag_ids?: string[] | null;
 }
 
 export interface ContactImport {
@@ -205,7 +216,7 @@ export interface HTTPValidationError {
   detail: ValidationError[];
 }
 
-// Dashboard Types (schemas are empty in OpenAPI, but we can infer structure)
+// Dashboard Types
 export interface DashboardStats {
   total_contacts?: number;
   total_messages?: number;
