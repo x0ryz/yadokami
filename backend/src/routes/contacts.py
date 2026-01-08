@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Query, status
 from src.core.dependencies import get_uow
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
-from src.models import Contact, get_utc_now
 from src.schemas import MessageResponse
 from src.schemas.contacts import (
     ContactCreate,
@@ -12,7 +11,6 @@ from src.schemas.contacts import (
     ContactResponse,
     ContactUpdate,
 )
-from src.services.media.storage import StorageService
 from src.services.messaging.chat import ChatService
 from src.services.notifications.service import NotificationService
 
