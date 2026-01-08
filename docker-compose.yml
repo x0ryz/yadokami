@@ -4,6 +4,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: always
+    volumes:
+      - ./temp_media:/app/temp_media
     env_file: .env
 
   worker:
@@ -11,6 +13,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: always
+    volumes:
+      - ./temp_media:/app/temp_media
     env_file: .env
     command: taskiq worker src.core.broker:broker src.worker
 

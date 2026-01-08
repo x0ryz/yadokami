@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '../api';
+import React, { useState, useEffect, useCallback } from "react";
+import { apiClient } from "../api";
 import {
   CampaignResponse,
   CampaignCreate,
@@ -8,18 +8,23 @@ import {
   CampaignSchedule,
   CampaignContactResponse,
   ContactImport,
-} from '../types';
-import CampaignList from '../components/campaigns/CampaignList';
-import CampaignDetails from '../components/campaigns/CampaignDetails';
-import CampaignForm from '../components/campaigns/CampaignForm';
-import { useWSEvent } from '../services/useWebSocket';
-import { EventType } from '../services/websocket';
+} from "../types";
+import CampaignList from "../components/campaigns/CampaignList";
+import CampaignDetails from "../components/campaigns/CampaignDetails";
+import CampaignForm from "../components/campaigns/CampaignForm";
+import { useWSEvent } from "../services/useWebSocket";
+import { EventType } from "../services/websocket";
 
 const CampaignsPage: React.FC = () => {
   const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<CampaignResponse | null>(null);
-  const [campaignStats, setCampaignStats] = useState<CampaignStats | null>(null);
-  const [campaignContacts, setCampaignContacts] = useState<CampaignContactResponse[]>([]);
+  const [selectedCampaign, setSelectedCampaign] =
+    useState<CampaignResponse | null>(null);
+  const [campaignStats, setCampaignStats] = useState<CampaignStats | null>(
+    null,
+  );
+  const [campaignContacts, setCampaignContacts] = useState<
+    CampaignContactResponse[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
@@ -35,35 +40,51 @@ const CampaignsPage: React.FC = () => {
   }, [selectedCampaign]);
 
   // WebSocket event handlers for real-time campaign updates
-  const handleCampaignUpdate = useCallback((data: any) => {
-    console.log('Campaign update received:', data);
-    
-    setCampaigns(prev => prev.map(campaign => 
-      campaign.id === data.campaign_id ? { ...campaign, status: data.status } : campaign
-    ));
-    
-    // Update selected campaign if it's the one that changed
-    if (selectedCampaign?.id === data.campaign_id) {
-      setSelectedCampaign(prev => prev ? { ...prev, status: data.status } : null);
-      // Reload stats for the selected campaign
-      loadCampaignDetails(data.campaign_id);
-    }
-  }, [selectedCampaign]);
+  const handleCampaignUpdate = useCallback(
+    (data: any) => {
+      console.log("Campaign update received:", data);
 
-  const handleCampaignProgress = useCallback((data: any) => {
-    console.log('Campaign progress received:', data);
-    
-    // Update campaign stats if this campaign is selected
-    if (selectedCampaign?.id === data.campaign_id) {
-      setCampaignStats(prev => prev ? {
-        ...prev,
-        sent_count: data.sent,
-        delivered_count: data.delivered,
-        failed_count: data.failed,
-        progress_percent: data.progress_percent
-      } : null);
-    }
-  }, [selectedCampaign]);
+      setCampaigns((prev) =>
+        prev.map((campaign) =>
+          campaign.id === data.campaign_id
+            ? { ...campaign, status: data.status }
+            : campaign,
+        ),
+      );
+
+      // Update selected campaign if it's the one that changed
+      if (selectedCampaign?.id === data.campaign_id) {
+        setSelectedCampaign((prev) =>
+          prev ? { ...prev, status: data.status } : null,
+        );
+        // Reload stats for the selected campaign
+        loadCampaignDetails(data.campaign_id);
+      }
+    },
+    [selectedCampaign],
+  );
+
+  const handleCampaignProgress = useCallback(
+    (data: any) => {
+      console.log("Campaign progress received:", data);
+
+      // Update campaign stats if this campaign is selected
+      if (selectedCampaign?.id === data.campaign_id) {
+        setCampaignStats((prev) =>
+          prev
+            ? {
+                ...prev,
+                sent_count: data.sent,
+                delivered_count: data.delivered,
+                failed_count: data.failed,
+                progress_percent: data.progress_percent,
+              }
+            : null,
+        );
+      }
+    },
+    [selectedCampaign],
+  );
 
   // Subscribe to WebSocket events
   useWSEvent(EventType.CAMPAIGN_STARTED, handleCampaignUpdate);
@@ -79,7 +100,7 @@ const CampaignsPage: React.FC = () => {
       const data = await apiClient.listCampaigns();
       setCampaigns(data);
     } catch (error) {
-      console.error('Помилка завантаження кампаній:', error);
+      console.error("Помилка завантаження кампаній:", error);
     } finally {
       setLoading(false);
     }
@@ -94,22 +115,27 @@ const CampaignsPage: React.FC = () => {
       setCampaignStats(stats);
       setCampaignContacts(contacts);
     } catch (error) {
-      console.error('Помилка завантаження деталей кампанії:', error);
+      console.error("Помилка завантаження деталей кампанії:", error);
     }
   };
 
-  const handleCreateCampaign = async (data: CampaignCreate | CampaignUpdate) => {
+  const handleCreateCampaign = async (
+    data: CampaignCreate | CampaignUpdate,
+  ) => {
     try {
       await apiClient.createCampaign(data as CampaignCreate);
       setShowCreateForm(false);
       await loadCampaigns();
     } catch (error) {
-      console.error('Помилка створення кампанії:', error);
+      console.error("Помилка створення кампанії:", error);
       throw error;
     }
   };
 
-  const handleUpdateCampaign = async (campaignId: string, data: CampaignUpdate) => {
+  const handleUpdateCampaign = async (
+    campaignId: string,
+    data: CampaignUpdate,
+  ) => {
     try {
       await apiClient.updateCampaign(campaignId, data);
       await loadCampaigns();
@@ -118,13 +144,13 @@ const CampaignsPage: React.FC = () => {
         setSelectedCampaign(updated);
       }
     } catch (error) {
-      console.error('Помилка оновлення кампанії:', error);
+      console.error("Помилка оновлення кампанії:", error);
       throw error;
     }
   };
 
   const handleDeleteCampaign = async (campaignId: string) => {
-    if (!window.confirm('Ви впевнені, що хочете видалити цю кампанію?')) {
+    if (!window.confirm("Ви впевнені, що хочете видалити цю кампанію?")) {
       return;
     }
     try {
@@ -134,11 +160,14 @@ const CampaignsPage: React.FC = () => {
       }
       await loadCampaigns();
     } catch (error) {
-      console.error('Помилка видалення кампанії:', error);
+      console.error("Помилка видалення кампанії:", error);
     }
   };
 
-  const handleScheduleCampaign = async (campaignId: string, data: CampaignSchedule) => {
+  const handleScheduleCampaign = async (
+    campaignId: string,
+    data: CampaignSchedule,
+  ) => {
     try {
       await apiClient.scheduleCampaign(campaignId, data);
       setShowScheduleForm(false);
@@ -148,7 +177,7 @@ const CampaignsPage: React.FC = () => {
         setSelectedCampaign(updated);
       }
     } catch (error) {
-      console.error('Помилка планування кампанії:', error);
+      console.error("Помилка планування кампанії:", error);
       throw error;
     }
   };
@@ -163,7 +192,7 @@ const CampaignsPage: React.FC = () => {
       //   setSelectedCampaign(updated);
       // }
     } catch (error) {
-      console.error('Помилка запуску кампанії:', error);
+      console.error("Помилка запуску кампанії:", error);
     }
   };
 
@@ -172,7 +201,7 @@ const CampaignsPage: React.FC = () => {
       await apiClient.pauseCampaign(campaignId);
       // Don't reload - WebSocket will handle updates
     } catch (error) {
-      console.error('Помилка паузи кампанії:', error);
+      console.error("Помилка паузи кампанії:", error);
     }
   };
 
@@ -181,17 +210,20 @@ const CampaignsPage: React.FC = () => {
       await apiClient.resumeCampaign(campaignId);
       // Don't reload - WebSocket will handle updates
     } catch (error) {
-      console.error('Помилка відновлення кампанії:', error);
+      console.error("Помилка відновлення кампанії:", error);
     }
   };
 
-  const handleAddContacts = async (campaignId: string, contacts: ContactImport[]) => {
+  const handleAddContacts = async (
+    campaignId: string,
+    contacts: ContactImport[],
+  ) => {
     try {
       await apiClient.addContactsManually(campaignId, contacts);
       await loadCampaignDetails(campaignId);
       await loadCampaigns();
     } catch (error) {
-      console.error('Помилка додавання контактів:', error);
+      console.error("Помилка додавання контактів:", error);
       throw error;
     }
   };
@@ -202,7 +234,7 @@ const CampaignsPage: React.FC = () => {
       await loadCampaignDetails(campaignId);
       await loadCampaigns();
     } catch (error) {
-      console.error('Помилка імпорту контактів:', error);
+      console.error("Помилка імпорту контактів:", error);
       throw error;
     }
   };
@@ -282,4 +314,3 @@ const CampaignsPage: React.FC = () => {
 };
 
 export default CampaignsPage;
-

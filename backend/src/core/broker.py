@@ -38,7 +38,6 @@ async def startup(state: TaskiqState):
         timeout=10.0,
         headers={
             "Authorization": f"Bearer {settings.META_TOKEN}",
-            "Content-Type": "application/json",
         },
     )
     state.http_client = client

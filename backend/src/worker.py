@@ -1,7 +1,9 @@
 import mimetypes
+import os
 import uuid
 from uuid import UUID
 
+import aiofiles
 import httpx
 from aiolimiter import AsyncLimiter
 from src.clients.meta import MetaClient
@@ -19,8 +21,6 @@ from src.schemas import (
 )
 from src.services.campaign.sender import CampaignSenderService
 from src.services.media.service import MediaService
-
-# Додайте імпорт AsyncIteratorFile, якщо ви додали його в storage.py
 from src.services.media.storage import AsyncIteratorFile, StorageService
 from src.services.messaging.processor import MessageProcessorService
 from src.services.messaging.sender import MessageSenderService
@@ -54,6 +54,68 @@ async def handle_messages_task(
             await sender_service.send_manual_message(message)
 
 
+@broker.task(
+    task_name="handle_media_send",
+    retry_on_exception=True,
+    max_retries=3,
+    retry_delay=5,
+)
+async def handle_media_send_task(
+    phone_number: str,
+    file_path: str,
+    filename: str,
+    mime_type: str,
+    caption: str | None = None,
+    request_id: str = None,
+    client: httpx.AsyncClient = TaskiqDepends(get_http_client),
+):
+    """
+    Handle media message sending (from API endpoint).
+
+    This task processes the complete media upload and send workflow.
+    """
+    async with limiter:
+        with logger.contextualize(request_id=request_id or str(uuid.uuid4())):
+            try:
+                uow = UnitOfWork(async_session_maker)
+                meta_client = MetaClient(client)
+                storage_service = StorageService()
+                notifier = NotificationService()
+
+                sender_service = MessageSenderService(
+                    uow, meta_client, notifier, storage_service
+                )
+
+                if not os.path.exists(file_path):
+                    logger.error(f"File not found at {file_path}")
+                    return
+
+                # Read the file bytes inside the worker
+                async with aiofiles.open(file_path, "rb") as f:
+                    file_bytes = await f.read()
+
+                # Send media message
+                await sender_service.send_media_message(
+                    phone_number=phone_number,
+                    file_bytes=file_bytes,
+                    filename=filename,
+                    mime_type=mime_type,
+                    caption=caption,
+                )
+
+                logger.info(
+                    f"Media message sent successfully to {phone_number}. "
+                    f"File: {filename}"
+                )
+            except Exception as e:
+                logger.error(f"Error sending media: {e}")
+                raise e
+            finally:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.debug(f"Cleaned up temp file: {file_path}")
+
+
 @broker.task(task_name="sync_account_data")
 async def handle_account_sync_task(
     message: WabaSyncRequest, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
@@ -66,7 +128,6 @@ async def handle_account_sync_task(
             await sync_service.sync_account_data()
 
 
-# === НОВА ЗАДАЧА ДЛЯ МЕДІА ===
 @broker.task(
     task_name="download_media", retry_on_exception=True, max_retries=3, retry_delay=5
 )
@@ -79,8 +140,8 @@ async def handle_media_download_task(
     client: httpx.AsyncClient = TaskiqDepends(get_http_client),
 ):
     """
-    Фонове завантаження медіа-файлів з Meta в R2.
-    Використовує stream, щоб не забивати пам'ять.
+    Background task for downloading media from Meta to R2.
+    Uses streaming to avoid memory issues with large files.
     """
     with logger.contextualize(message_id=str(message_id), media_id=meta_media_id):
         uow = UnitOfWork(async_session_maker)
@@ -88,35 +149,34 @@ async def handle_media_download_task(
         storage_service = StorageService()
 
         try:
-            # 1. Отримуємо тимчасове посилання від Meta
+            # Get temporary URL from Meta
             media_url = await meta_client.get_media_url(meta_media_id)
 
-            # 2. Генеруємо шлях для збереження
+            # Generate R2 path
             ext = mimetypes.guess_extension(mime_type) or ".bin"
             filename = f"{uuid.uuid4()}{ext}"
             r2_key = f"whatsapp/{media_type}s/{filename}"
 
             logger.info(f"Starting stream download for {media_type}: {r2_key}")
 
-            # 3. Качаємо потік та передаємо його відразу в R2
-            # Використовуємо raw client для стрімінгу, якщо в MetaClient немає методу stream
+            # Stream download and upload to R2
             async with client.stream("GET", media_url) as response:
                 response.raise_for_status()
 
-                # Отримуємо розмір файлу з заголовків (якщо є)
+                # Get file size from headers
                 file_size = int(response.headers.get("content-length", 0))
 
-                # Обгортаємо ітератор в файлоподібний об'єкт
+                # Wrap iterator in file-like object
                 file_stream = AsyncIteratorFile(response.aiter_bytes())
 
-                # Заливаємо в R2
+                # Upload to R2
                 await storage_service.upload_stream(
                     file_stream=file_stream,
                     object_name=r2_key,
                     content_type=mime_type,
                 )
 
-            # 4. Зберігаємо метадані в БД
+            # Save metadata to DB
             async with uow:
                 await uow.messages.add_media_file(
                     message_id=message_id,
@@ -134,7 +194,7 @@ async def handle_media_download_task(
 
         except Exception as e:
             logger.error(f"Failed to process media: {e}")
-            # Тут можна додати логіку оновлення статусу повідомлення на FAILED, якщо потрібно
+            raise
 
 
 @broker.task(
@@ -271,7 +331,6 @@ async def handle_campaign_resume_task(
             uow = UnitOfWork(async_session_maker)
             meta_client = MetaClient(client)
 
-            # DI
             notifier = NotificationService()
             message_sender = MessageSenderService(uow, meta_client, notifier)
             sender = CampaignSenderService(uow, message_sender, notifier)

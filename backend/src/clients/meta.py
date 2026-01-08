@@ -38,6 +38,47 @@ class MetaClient:
         resp.raise_for_status()
         return resp.json()
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception(is_transient_error),
+        reraise=True,
+    )
+    async def upload_media(
+        self, phone_id: str, file_bytes: bytes, mime_type: str, filename: str
+    ) -> str:
+        """
+        Upload media file to WhatsApp Business API.
+
+        Args:
+            phone_id: WhatsApp Business phone number ID
+            file_bytes: Binary file content
+            mime_type: MIME type of the file (e.g., 'image/jpeg')
+            filename: Original filename
+
+        Returns:
+            str: Media ID from Meta
+
+        Raises:
+            httpx.HTTPStatusError: If upload fails
+        """
+        url = f"{self.base_url}/{phone_id}/media"
+
+        files = {"file": (filename, file_bytes, mime_type)}
+
+        data = {"messaging_product": "whatsapp"}
+
+        resp = await self.client.post(url, files=files, data=data)
+        resp.raise_for_status()
+
+        result = resp.json()
+        media_id = result.get("id")
+
+        if not media_id:
+            raise ValueError("No media ID returned from Meta API")
+
+        return media_id
+
     async def fetch_account_info(self, waba_id: str):
         """Fetch WABA account information from Meta Graph API."""
         url = f"{self.base_url}/{waba_id}"

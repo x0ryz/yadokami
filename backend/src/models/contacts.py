@@ -2,14 +2,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
 
 from .base import ContactStatus, get_utc_now
+from .tags import ContactTagLink
 
 if TYPE_CHECKING:
     from .campaigns import CampaignContact
     from .messages import Message
+    from .tags import Tag
 
 
 class Contact(SQLModel, table=True):
@@ -31,7 +32,9 @@ class Contact(SQLModel, table=True):
     )
 
     source: Optional[str] = None
-    tags: List[str] = Field(default=[], sa_column=Column(JSONB))
+    tags: List["Tag"] = Relationship(
+        back_populates="contacts", link_model=ContactTagLink
+    )
 
     created_at: datetime = Field(
         default_factory=get_utc_now, sa_column=Column(DateTime(timezone=True))

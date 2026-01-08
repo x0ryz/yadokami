@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ContactImport } from '../../types';
+import React, { useState } from "react";
+import { ContactImport } from "../../types";
 
 interface ContactImportFormProps {
   onAddContacts: (contacts: ContactImport[]) => Promise<void>;
@@ -12,21 +12,25 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
   onImportFile,
   onCancel,
 }) => {
-  const [importMethod, setImportMethod] = useState<'manual' | 'file'>('manual');
+  const [importMethod, setImportMethod] = useState<"manual" | "file">("manual");
   const [contacts, setContacts] = useState<ContactImport[]>([
-    { phone_number: '', name: '', tags: [] },
+    { phone_number: "", name: "", tags: [] },
   ]);
   const [file, setFile] = useState<File | null>(null);
 
   const addContactRow = () => {
-    setContacts([...contacts, { phone_number: '', name: '', tags: [] }]);
+    setContacts([...contacts, { phone_number: "", name: "", tags: [] }]);
   };
 
   const removeContactRow = (index: number) => {
     setContacts(contacts.filter((_, i) => i !== index));
   };
 
-  const updateContact = (index: number, field: keyof ContactImport, value: any) => {
+  const updateContact = (
+    index: number,
+    field: keyof ContactImport,
+    value: any,
+  ) => {
     const updated = [...contacts];
     updated[index] = { ...updated[index], [field]: value };
     setContacts(updated);
@@ -51,38 +55,43 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
     <div className="space-y-4">
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setImportMethod('manual')}
+          onClick={() => setImportMethod("manual")}
           className={`px-4 py-2 font-medium text-sm transition-colors ${
-            importMethod === 'manual'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+            importMethod === "manual"
+              ? "border-b-2 border-blue-600 text-blue-600"
+              : "text-gray-600 hover:text-gray-900"
           }`}
         >
           Вручну
         </button>
         <button
-          onClick={() => setImportMethod('file')}
+          onClick={() => setImportMethod("file")}
           className={`px-4 py-2 font-medium text-sm transition-colors ${
-            importMethod === 'file'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+            importMethod === "file"
+              ? "border-b-2 border-blue-600 text-blue-600"
+              : "text-gray-600 hover:text-gray-900"
           }`}
         >
           З файлу
         </button>
       </div>
 
-      {importMethod === 'manual' ? (
+      {importMethod === "manual" ? (
         <form onSubmit={handleManualSubmit} className="space-y-4">
           <div className="max-h-64 overflow-y-auto space-y-2">
             {contacts.map((contact, index) => (
-              <div key={index} className="p-3 border border-gray-200 rounded-lg space-y-2">
+              <div
+                key={index}
+                className="p-3 border border-gray-200 rounded-lg space-y-2"
+              >
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Номер телефону *"
                     value={contact.phone_number}
-                    onChange={(e) => updateContact(index, 'phone_number', e.target.value)}
+                    onChange={(e) =>
+                      updateContact(index, "phone_number", e.target.value)
+                    }
                     required
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
@@ -99,19 +108,24 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
                 <input
                   type="text"
                   placeholder="Ім'я (необов'язково)"
-                  value={contact.name || ''}
-                  onChange={(e) => updateContact(index, 'name', e.target.value || null)}
+                  value={contact.name || ""}
+                  onChange={(e) =>
+                    updateContact(index, "name", e.target.value || null)
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
                 <input
                   type="text"
                   placeholder="Теги через кому (необов'язково)"
-                  value={contact.tags?.join(', ') || ''}
+                  value={contact.tags?.join(", ") || ""}
                   onChange={(e) =>
                     updateContact(
                       index,
-                      'tags',
-                      e.target.value.split(',').map((t) => t.trim()).filter(Boolean)
+                      "tags",
+                      e.target.value
+                        .split(",")
+                        .map((t: string) => t.trim())
+                        .filter(Boolean),
                     )
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -182,4 +196,3 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
 };
 
 export default ContactImportForm;
-

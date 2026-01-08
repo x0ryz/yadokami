@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   CampaignResponse,
   CampaignCreate,
@@ -7,11 +7,11 @@ import {
   CampaignSchedule,
   CampaignContactResponse,
   ContactImport,
-  CampaignStatus,
+  CampaignStatus, // <--- Переконайтеся, що це тут є
   MessageType,
-} from '../../types';
-import CampaignForm from './CampaignForm';
-import ContactImportForm from './ContactImportForm';
+} from "../../types";
+import CampaignForm from "./CampaignForm";
+import ContactImportForm from "./ContactImportForm";
 
 interface CampaignDetailsProps {
   campaign: CampaignResponse;
@@ -22,7 +22,10 @@ interface CampaignDetailsProps {
   onStart: (campaignId: string) => Promise<void>;
   onPause: (campaignId: string) => Promise<void>;
   onResume: (campaignId: string) => Promise<void>;
-  onAddContacts: (campaignId: string, contacts: ContactImport[]) => Promise<void>;
+  onAddContacts: (
+    campaignId: string,
+    contacts: ContactImport[],
+  ) => Promise<void>;
   onImportContacts: (campaignId: string, file: File) => Promise<void>;
   showScheduleForm: boolean;
   onShowScheduleForm: (show: boolean) => void;
@@ -44,7 +47,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
 }) => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showAddContacts, setShowAddContacts] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'contacts'>('overview');
+  const [activeTab, setActiveTab] = useState<"overview" | "contacts">(
+    "overview",
+  );
 
   const canEdit = campaign.status === CampaignStatus.DRAFT;
   const canSchedule = campaign.status === CampaignStatus.DRAFT;
@@ -73,13 +78,18 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{campaign.name}</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {campaign.name}
+            </h2>
             <div className="flex items-center gap-4 text-sm text-gray-600">
-              <span className={`px-3 py-1 rounded-full ${getStatusColor(campaign.status)}`}>
+              <span
+                className={`px-3 py-1 rounded-full ${getStatusColor(campaign.status)}`}
+              >
                 {campaign.status}
               </span>
               <span>
-                <span className="font-medium">Тип:</span> {campaign.message_type}
+                <span className="font-medium">Тип:</span>{" "}
+                {campaign.message_type}
               </span>
             </div>
           </div>
@@ -132,7 +142,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">Прогрес</span>
-              <span className="text-sm text-gray-600">{progressPercent.toFixed(1)}%</span>
+              <span className="text-sm text-gray-600">
+                {progressPercent.toFixed(1)}%
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
@@ -148,21 +160,21 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
       <div className="border-b border-gray-200 px-6">
         <div className="flex gap-4">
           <button
-            onClick={() => setActiveTab('overview')}
+            onClick={() => setActiveTab("overview")}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'overview'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+              activeTab === "overview"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
             Огляд
           </button>
           <button
-            onClick={() => setActiveTab('contacts')}
+            onClick={() => setActiveTab("contacts")}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'contacts'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+              activeTab === "contacts"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
             Контакти ({contacts.length})
@@ -172,17 +184,21 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'overview' ? (
+        {activeTab === "overview" ? (
           <div className="space-y-6">
             {/* Stats */}
             {stats && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-gray-900">{stats.total_contacts}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {stats.total_contacts}
+                  </div>
                   <div className="text-sm text-gray-600">Всього контактів</div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-blue-600">{stats.sent_count}</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {stats.sent_count}
+                  </div>
                   <div className="text-sm text-gray-600">Відправлено</div>
                 </div>
                 <div className="bg-green-50 rounded-lg p-4">
@@ -192,7 +208,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                   <div className="text-sm text-gray-600">Доставлено</div>
                 </div>
                 <div className="bg-red-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-red-600">{stats.failed_count}</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {stats.failed_count}
+                  </div>
                   <div className="text-sm text-gray-600">Помилок</div>
                 </div>
               </div>
@@ -200,10 +218,16 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
 
             {/* Details */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-              <h3 className="font-semibold text-gray-800 mb-3">Деталі кампанії</h3>
+              <h3 className="font-semibold text-gray-800 mb-3">
+                Деталі кампанії
+              </h3>
               <div>
-                <span className="font-medium text-gray-700">Тип повідомлення:</span>
-                <span className="ml-2 text-gray-900">{campaign.message_type}</span>
+                <span className="font-medium text-gray-700">
+                  Тип повідомлення:
+                </span>
+                <span className="ml-2 text-gray-900">
+                  {campaign.message_type}
+                </span>
               </div>
               {campaign.template_id && (
                 <div>
@@ -215,7 +239,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
               )}
               {campaign.message_body && (
                 <div>
-                  <span className="font-medium text-gray-700">Текст повідомлення:</span>
+                  <span className="font-medium text-gray-700">
+                    Текст повідомлення:
+                  </span>
                   <p className="mt-1 text-gray-900 bg-white p-3 rounded border">
                     {campaign.message_body}
                   </p>
@@ -223,9 +249,11 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
               )}
               {campaign.scheduled_at && (
                 <div>
-                  <span className="font-medium text-gray-700">Заплановано:</span>
+                  <span className="font-medium text-gray-700">
+                    Заплановано:
+                  </span>
                   <span className="ml-2 text-gray-900">
-                    {new Date(campaign.scheduled_at).toLocaleString('uk-UA')}
+                    {new Date(campaign.scheduled_at).toLocaleString("uk-UA")}
                   </span>
                 </div>
               )}
@@ -233,7 +261,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                 <div>
                   <span className="font-medium text-gray-700">Запущено:</span>
                   <span className="ml-2 text-gray-900">
-                    {new Date(campaign.started_at).toLocaleString('uk-UA')}
+                    {new Date(campaign.started_at).toLocaleString("uk-UA")}
                   </span>
                 </div>
               )}
@@ -241,7 +269,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                 <div>
                   <span className="font-medium text-gray-700">Завершено:</span>
                   <span className="ml-2 text-gray-900">
-                    {new Date(campaign.completed_at).toLocaleString('uk-UA')}
+                    {new Date(campaign.completed_at).toLocaleString("uk-UA")}
                   </span>
                 </div>
               )}
@@ -250,7 +278,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
         ) : (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-800">Контакти кампанії</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                Контакти кампанії
+              </h3>
               {canEdit && (
                 <button
                   onClick={() => setShowAddContacts(true)}
@@ -287,16 +317,22 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                   <tbody className="divide-y divide-gray-200">
                     {contacts.map((contact) => (
                       <tr key={contact.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{contact.phone_number}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {contact.phone_number}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {contact.name || '-'}
+                          {contact.name || "-"}
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <span className={`px-2 py-1 rounded-full text-xs ${getContactStatusColor(contact.status)}`}>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${getContactStatusColor(contact.status)}`}
+                          >
                             {contact.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{contact.retry_count}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {contact.retry_count}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -357,32 +393,32 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   );
 };
 
+// Helper components outside
 const getStatusColor = (status: CampaignStatus) => {
   const colors = {
-    [CampaignStatus.DRAFT]: 'bg-gray-100 text-gray-800',
-    [CampaignStatus.SCHEDULED]: 'bg-blue-100 text-blue-800',
-    [CampaignStatus.RUNNING]: 'bg-green-100 text-green-800',
-    [CampaignStatus.PAUSED]: 'bg-yellow-100 text-yellow-800',
-    [CampaignStatus.COMPLETED]: 'bg-purple-100 text-purple-800',
-    [CampaignStatus.FAILED]: 'bg-red-100 text-red-800',
+    [CampaignStatus.DRAFT]: "bg-gray-100 text-gray-800",
+    [CampaignStatus.SCHEDULED]: "bg-blue-100 text-blue-800",
+    [CampaignStatus.RUNNING]: "bg-green-100 text-green-800",
+    [CampaignStatus.PAUSED]: "bg-yellow-100 text-yellow-800",
+    [CampaignStatus.COMPLETED]: "bg-purple-100 text-purple-800",
+    [CampaignStatus.FAILED]: "bg-red-100 text-red-800",
   };
-  return colors[status] || 'bg-gray-100 text-gray-800';
+  return colors[status] || "bg-gray-100 text-gray-800";
 };
 
 const getContactStatusColor = (status: string) => {
   const statusLower = status.toLowerCase();
-  if (statusLower === 'sent') return 'bg-blue-100 text-blue-800';
-  if (statusLower === 'delivered') return 'bg-green-100 text-green-800';
-  if (statusLower === 'failed') return 'bg-red-100 text-red-800';
-  return 'bg-gray-100 text-gray-800';
+  if (statusLower === "sent") return "bg-blue-100 text-blue-800";
+  if (statusLower === "delivered") return "bg-green-100 text-green-800";
+  if (statusLower === "failed") return "bg-red-100 text-red-800";
+  return "bg-gray-100 text-gray-800";
 };
 
-// Schedule Form Component
 const ScheduleForm: React.FC<{
   onSubmit: (data: CampaignSchedule) => Promise<void>;
   onCancel: () => void;
 }> = ({ onSubmit, onCancel }) => {
-  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledAt, setScheduledAt] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,4 +461,3 @@ const ScheduleForm: React.FC<{
 };
 
 export default CampaignDetails;
-
