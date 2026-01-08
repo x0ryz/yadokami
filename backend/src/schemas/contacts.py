@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 from src.models.base import ContactStatus, MessageDirection, MessageStatus
-from src.schemas.tags import TagResponse
 
 from .base import TimestampMixin, UUIDMixin
 
@@ -14,7 +13,7 @@ class ContactCreate(BaseModel):
 
     phone_number: str = Field(..., min_length=10, max_length=15)
     name: str | None = Field(default=None, max_length=255)
-    tag_ids: list[UUID] = Field(default=[])
+    tags: list[str] = Field(default_factory=list)
 
     @field_validator("phone_number")
     @classmethod
@@ -30,7 +29,7 @@ class ContactCreate(BaseModel):
             "example": {
                 "phone_number": "380671234567",
                 "name": "John Doe",
-                "tag_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+                "tags": ["vip", "active"],
             }
         }
     )
@@ -40,14 +39,11 @@ class ContactUpdate(BaseModel):
     """Contact update schema"""
 
     name: str | None = Field(default=None, max_length=255)
-    tag_ids: list[UUID] | None = None
+    tags: list[str] | None = None
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example": {
-                "name": "John Smith",
-                "tag_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
-            }
+            "example": {"name": "John Smith", "tags": ["vip", "premium"]}
         }
     )
 
@@ -69,7 +65,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
     status: ContactStatus
     last_message_at: datetime | None = None
     source: str | None = None
-    tags: list[TagResponse] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -82,7 +78,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
                 "status": "new",
                 "last_message_at": "2024-01-15T10:30:00Z",
                 "source": "import_csv",
-                "tags": [{"id": "...", "name": "vip", "color": "#FF0000"}],
+                "tags": ["vip"],
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-15T10:30:00Z",
             }
@@ -96,7 +92,6 @@ class ContactListResponse(BaseModel):
     name: str | None = None
     unread_count: int
     last_message_at: datetime | None = None
-    tags: list[TagResponse] = Field(default_factory=list)
     last_message: Any | None = Field(default=None, exclude=True)
 
     @computed_field

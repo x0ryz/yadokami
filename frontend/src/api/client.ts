@@ -22,8 +22,6 @@ import {
   SearchContactsParams,
   SendMessageParams,
   WebhookVerifyParams,
-  TagCreate,
-  Tag,
 } from "../types";
 
 export class ApiClient {
@@ -146,25 +144,6 @@ export class ApiClient {
         },
       },
     );
-    return response.data;
-  }
-
-  async getTags(): Promise<Tag[]> {
-    const response = await this.client.get<Tag[]>("/tags");
-    return response.data;
-  }
-
-  async createTag(data: TagCreate): Promise<Tag> {
-    const response = await this.client.post<Tag>("/tags", data);
-    return response.data;
-  }
-
-  async deleteTag(tagId: string): Promise<void> {
-    await this.client.delete(`/tags/${tagId}`);
-  }
-
-  async updateTag(tagId: string, data: TagUpdate): Promise<Tag> {
-    const response = await this.client.patch<Tag>(`/tags/${tagId}`, data);
     return response.data;
   }
 

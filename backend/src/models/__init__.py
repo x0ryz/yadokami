@@ -8,7 +8,6 @@ from .base import (
 from .campaigns import Campaign, CampaignContact
 from .contacts import Contact
 from .messages import MediaFile, Message
-from .tags import ContactTagLink, Tag
 from .templates import Template
 from .waba import WabaAccount, WabaPhoneNumber
 from .webhooks import WebhookLog
@@ -28,6 +27,4 @@ __all__ = [
     "Campaign",
     "CampaignContact",
     "WebhookLog",
-    "Tag",
-    "ContactTagLink",
 ]

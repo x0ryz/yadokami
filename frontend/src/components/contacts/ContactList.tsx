@@ -17,11 +17,13 @@ const ContactList: React.FC<ContactListProps> = ({
     const date = new Date(dateString);
     const now = new Date();
 
+    // Перевірка на "Сьогодні" (порівнюємо календарні дати)
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
 
+    // Перевірка на "Вчора"
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
     const isYesterday =
@@ -37,6 +39,7 @@ const ContactList: React.FC<ContactListProps> = ({
     } else if (isYesterday) {
       return "Вчора";
     } else {
+      // Якщо більше 7 днів тому - повна дата, інакше - день тижня
       const diffTime = Math.abs(now.getTime() - date.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -58,7 +61,7 @@ const ContactList: React.FC<ContactListProps> = ({
       case MessageStatus.DELIVERED:
         return <span className="text-gray-400">✓✓</span>;
       case MessageStatus.READ:
-        return <span className="text-blue-500 font-bold">✓✓</span>;
+        return <span className="text-blue-500 font-bold">✓✓</span>; // font-bold для кращої видимості
       case MessageStatus.FAILED:
         return <span className="text-red-500">!</span>;
       case MessageStatus.PENDING:
@@ -93,12 +96,14 @@ const ContactList: React.FC<ContactListProps> = ({
             }`}
           >
             <div className="flex justify-between items-baseline mb-1">
+              {/* Ім'я або телефон */}
               <h3
                 className={`font-semibold text-sm truncate pr-2 ${isSelected ? "text-blue-900" : "text-gray-900"}`}
               >
                 {contact.name || contact.phone_number}
               </h3>
 
+              {/* Час останнього повідомлення */}
               {contact.last_message_at && (
                 <span
                   className={`text-xs whitespace-nowrap ${contact.unread_count > 0 ? "text-green-600 font-medium" : "text-gray-400"}`}
@@ -108,22 +113,8 @@ const ContactList: React.FC<ContactListProps> = ({
               )}
             </div>
 
-            {/* ВІДОБРАЖЕННЯ ТЕГІВ */}
-            {contact.tags && contact.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-1">
-                {contact.tags.map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="text-[10px] px-1.5 py-0.5 rounded-full text-white"
-                    style={{ backgroundColor: tag.color }}
-                  >
-                    {tag.name}
-                  </span>
-                ))}
-              </div>
-            )}
-
             <div className="flex justify-between items-center">
+              {/* Прев'ю повідомлення */}
               <div className="flex-1 min-w-0 flex items-center text-sm text-gray-600 h-5">
                 {isOutbound && (
                   <span className="mr-1 text-xs flex-shrink-0">
@@ -141,6 +132,7 @@ const ContactList: React.FC<ContactListProps> = ({
                 </p>
               </div>
 
+              {/* Лічильник непрочитаних */}
               {contact.unread_count > 0 && (
                 <span className="ml-2 bg-green-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center flex-shrink-0">
                   {contact.unread_count}
