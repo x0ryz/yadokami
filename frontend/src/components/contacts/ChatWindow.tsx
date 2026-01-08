@@ -4,15 +4,25 @@ import {
   MessageResponse,
   MessageDirection,
   MessageStatus,
+  Tag,
+  TagCreate,
+  TagUpdate,
 } from "../../types";
+import TagSelector from "../tags/TagSelector";
 
 interface ChatWindowProps {
   contact: Contact;
   messages: MessageResponse[];
   loading: boolean;
   onSendMessage: (phone: string, text: string, replyToId?: string) => void;
-  // Додаємо новий проп
   onSendMedia: (phone: string, file: File, caption?: string) => void;
+
+  // Нові пропси для роботи з тегами
+  availableTags: Tag[];
+  onUpdateTags: (tagIds: string[]) => void;
+  onCreateTag: (tag: TagCreate) => Promise<void>;
+  onDeleteTag: (tagId: string) => Promise<void>;
+  onEditTag: (tagId: string, data: TagUpdate) => Promise<void>;
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -21,17 +31,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   loading,
   onSendMessage,
   onSendMedia,
+  availableTags,
+  onUpdateTags,
+  onCreateTag,
+  onDeleteTag,
+  onEditTag,
 }) => {
   const [messageText, setMessageText] = useState("");
   const [replyTo, setReplyTo] = useState<MessageResponse | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Стейт для файлу
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isTagSelectorOpen, setIsTagSelectorOpen] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null); // Ref для інпуту файлу
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     scrollToBottom("auto");
-    setSelectedFile(null); // Скидаємо файл при зміні контакту
+    setSelectedFile(null);
     setMessageText("");
+    setIsTagSelectorOpen(false); // Закриваємо селектор при зміні контакту
   }, [contact.id]);
 
   useEffect(() => {
@@ -46,13 +64,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const handleSend = () => {
     if (selectedFile) {
-      // Відправка медіа
       onSendMedia(contact.phone_number, selectedFile, messageText);
       setSelectedFile(null);
       setMessageText("");
       setReplyTo(null);
     } else if (messageText.trim()) {
-      // Відправка тексту
       onSendMessage(contact.phone_number, messageText, replyTo?.id);
       setMessageText("");
       setReplyTo(null);
@@ -103,22 +119,50 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-10">
+      <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">
             {contact.name || contact.phone_number}
           </h2>
           <p className="text-sm text-gray-600">{contact.phone_number}</p>
         </div>
-        <div className="flex gap-2">
-          {contact.tags?.map((tag, idx) => (
-            <span
-              key={idx}
-              className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full border border-gray-200"
-            >
-              {tag}
-            </span>
-          ))}
+
+        {/* Блок тегів */}
+        <div className="flex items-center gap-2 relative">
+          <div className="flex gap-1 flex-wrap justify-end max-w-[300px]">
+            {contact.tags?.map((tag) => (
+              <span
+                key={tag.id}
+                className="text-xs px-2 py-1 rounded-full text-white whitespace-nowrap"
+                style={{ backgroundColor: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setIsTagSelectorOpen(!isTagSelectorOpen)}
+            className={`p-1.5 rounded-full transition-colors ${
+              isTagSelectorOpen
+                ? "bg-blue-100 text-blue-600"
+                : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+            }`}
+            title="Редагувати теги"
+          >
+            ✏️
+          </button>
+
+          <TagSelector
+            isOpen={isTagSelectorOpen}
+            onClose={() => setIsTagSelectorOpen(false)}
+            availableTags={availableTags}
+            selectedTags={contact.tags || []}
+            onAssignTags={onUpdateTags}
+            onCreateTag={onCreateTag}
+            onDeleteTag={onDeleteTag}
+            onEditTag={onEditTag}
+          />
         </div>
       </div>
 
@@ -308,16 +352,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
 
         <div className="flex gap-2 items-end bg-white p-2 rounded-2xl border border-gray-200 shadow-sm">
-          {/* File Input Hidden */}
           <input
             type="file"
             ref={fileInputRef}
             className="hidden"
             onChange={handleFileSelect}
-            // Можна додати accept="..." для обмеження типів
           />
 
-          {/* Attachment Button */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center"
