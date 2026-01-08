@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
 import { config } from "../config/env";
 import {
   Contact,
-  ContactListResponse, // Переконайтеся, що цей тип експортується з types
+  ContactListResponse,
   ContactCreate,
   ContactUpdate,
   ContactImport,
@@ -24,7 +24,7 @@ import {
   SendMessageParams,
   WebhookVerifyParams,
   TagCreate,
-  TagUpdate, // Додано TagUpdate
+  TagUpdate,
   Tag,
 } from "../types";
 
@@ -32,16 +32,20 @@ export class ApiClient {
   private client: AxiosInstance;
 
   constructor(
+    // Використовуємо config.apiUrl з імпорту.
+    // Якщо config.apiUrl не задано, використовуємо фолбек.
     baseURL: string = config.apiUrl || "https://dev.x0ryz.cc",
-    config?: AxiosRequestConfig,
+    // ЗМІНА: перейменували аргумент на axiosConfig, щоб не конфліктував з імпортом config
+    axiosConfig?: AxiosRequestConfig,
   ) {
     this.client = axios.create({
       baseURL,
       headers: {
         "Content-Type": "application/json",
       },
-      ...config,
-      // ВАЖЛИВО: Кастомна серіалізація параметрів для підтримки FastAPI (tags=1&tags=2)
+      ...axiosConfig, // Використовуємо перейменований аргумент
+
+      // Кастомна серіалізація параметрів для підтримки масивів (tags=1&tags=2)
       paramsSerializer: (params) => {
         const searchParams = new URLSearchParams();
         for (const key in params) {
@@ -61,6 +65,8 @@ export class ApiClient {
       (error) => Promise.reject(error),
     );
   }
+
+  // ... (решта методів залишаються без змін) ...
 
   // Webhooks
   async verifyWebhook(params: WebhookVerifyParams): Promise<any> {
@@ -83,7 +89,7 @@ export class ApiClient {
       params: {
         limit,
         offset,
-        tags, // Тепер це буде серіалізовано як tags=id1&tags=id2
+        tags,
       },
     });
     return response.data;
