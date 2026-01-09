@@ -25,6 +25,7 @@ import {
   WebhookVerifyParams,
   TagCreate,
   TagUpdate,
+  WabaStatusResponse,
   Tag,
 } from "../types";
 
@@ -208,6 +209,13 @@ export class ApiClient {
   // WABA
   async triggerWabaSync(): Promise<any> {
     const response = await this.client.post("/waba/sync");
+    return response.data;
+  }
+
+  async getWabaStatus(): Promise<WabaStatusResponse> {
+    const response = await this.client.get<WabaStatusResponse>(
+      "/dashboard/waba-status",
+    );
     return response.data;
   }
 

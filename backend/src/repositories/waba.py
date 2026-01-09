@@ -1,5 +1,4 @@
 from sqlmodel import select
-
 from src.models import WabaAccount, WabaPhoneNumber
 from src.repositories.base import BaseRepository
 

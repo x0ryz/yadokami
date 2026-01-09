@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.core.database import get_session
 from src.models import (
     Campaign,
@@ -12,6 +11,8 @@ from src.models import (
     Message,
     MessageDirection,
     MessageStatus,
+    WabaAccount,
+    WabaPhoneNumber,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -186,3 +187,50 @@ async def get_messages_timeline(
         )
 
     return timeline
+
+
+@router.get("/waba-status")
+async def get_waba_status(session: AsyncSession = Depends(get_session)):
+    """
+    Get WABA accounts and phone numbers status.
+
+    Returns current data from database - fast response.
+    Use /waba/sync endpoint to refresh data from Meta.
+    """
+    # Get all WABA accounts
+    stmt = select(WabaAccount)
+    result = await session.exec(stmt)
+    accounts = result.all()
+
+    # Get all phone numbers with relationships
+    stmt = select(WabaPhoneNumber)
+    result = await session.exec(stmt)
+    phones = result.all()
+
+    return {
+        "accounts": [
+            {
+                "id": str(acc.id),
+                "waba_id": acc.waba_id,
+                "name": acc.name,
+                "account_review_status": acc.account_review_status,
+                "business_verification_status": acc.business_verification_status,
+            }
+            for acc in accounts
+        ],
+        "phone_numbers": [
+            {
+                "id": str(phone.id),
+                "waba_id": str(phone.waba_id),
+                "phone_number_id": phone.phone_number_id,
+                "display_phone_number": phone.display_phone_number,
+                "status": phone.status,
+                "quality_rating": phone.quality_rating,
+                "messaging_limit_tier": phone.messaging_limit_tier,
+                "updated_at": phone.updated_at.isoformat()
+                if phone.updated_at
+                else None,
+            }
+            for phone in phones
+        ],
+    }
