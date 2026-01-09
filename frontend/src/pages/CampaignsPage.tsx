@@ -244,7 +244,7 @@ const CampaignsPage: React.FC = () => {
       {/* Campaigns List */}
       <div className="w-1/3 border border-gray-200 rounded-lg bg-white overflow-hidden flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Розсилки</h2>
             <button
               onClick={() => setShowCreateForm(true)}

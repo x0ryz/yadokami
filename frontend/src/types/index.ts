@@ -216,28 +216,56 @@ export interface HTTPValidationError {
   detail: ValidationError[];
 }
 
-// Dashboard Types
+// src/types/index.ts (додайте до існуючого файлу)
+
 export interface DashboardStats {
-  total_contacts?: number;
-  total_messages?: number;
-  sent_messages?: number;
-  received_messages?: number;
-  active_campaigns?: number;
-  [key: string]: any;
+  contacts: {
+    total: number;
+    unread: number;
+  };
+  messages: {
+    total: number;
+    sent: number;
+    received: number;
+    last_24h: number;
+    delivery_rate: number;
+  };
+  campaigns: {
+    total: number;
+    active: number;
+    completed: number;
+  };
+}
+
+export interface RecentMessage {
+  id: string;
+  direction: "inbound" | "outbound";
+  type: string;
+  status: string;
+  created_at: string;
+}
+
+export interface RecentCampaign {
+  id: string;
+  name: string;
+  status: string;
+  sent_count: number;
+  total_contacts: number;
+  updated_at: string;
 }
 
 export interface RecentActivity {
-  messages?: MessageResponse[];
-  campaigns?: CampaignResponse[];
-  [key: string]: any;
+  messages: RecentMessage[];
+  campaigns: RecentCampaign[];
 }
 
-export interface MessagesTimeline {
+export interface TimelinePoint {
   date: string;
-  count: number;
-  [key: string]: any;
+  sent: number;
+  received: number;
 }
 
+export type MessagesTimeline = TimelinePoint[];
 // Query Parameters Types
 export interface PaginationParams {
   limit?: number;
