@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { apiClient } from "../api";
 import {
   CampaignResponse,
@@ -8,12 +8,26 @@ import {
   CampaignSchedule,
   CampaignContactResponse,
   ContactImport,
+  CampaignStatus,
 } from "../types";
 import CampaignList from "../components/campaigns/CampaignList";
 import CampaignDetails from "../components/campaigns/CampaignDetails";
 import CampaignForm from "../components/campaigns/CampaignForm";
 import { useWSEvent } from "../services/useWebSocket";
 import { EventType } from "../services/websocket";
+
+type CampaignTabKey = "all" | "drafts" | "scheduled" | "completed";
+
+const CAMPAIGN_TABS: {
+  key: CampaignTabKey;
+  label: string;
+  status?: CampaignStatus;
+}[] = [
+  { key: "all", label: "Усі", status: undefined },
+  { key: "drafts", label: "Чернетки", status: CampaignStatus.DRAFT },
+  { key: "scheduled", label: "Заплановані", status: CampaignStatus.SCHEDULED },
+  { key: "completed", label: "Завершені", status: CampaignStatus.COMPLETED },
+];
 
 const CampaignsPage: React.FC = () => {
   const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
@@ -28,10 +42,37 @@ const CampaignsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<CampaignTabKey>("drafts");
+
+  const statusFilter = useMemo(
+    () => CAMPAIGN_TABS.find((tab) => tab.key === activeTab)?.status,
+    [activeTab],
+  );
+
+  const sortCampaigns = useCallback((items: CampaignResponse[]) => {
+    const getTimestamp = (campaign: CampaignResponse) => {
+      const date = campaign.scheduled_at || campaign.created_at;
+      return date ? new Date(date).getTime() : 0;
+    };
+
+    return [...items].sort((a, b) => getTimestamp(b) - getTimestamp(a));
+  }, []);
+
+  const loadCampaigns = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient.listCampaigns(statusFilter);
+      setCampaigns(sortCampaigns(data));
+    } catch (error) {
+      console.error("Помилка завантаження кампаній:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, sortCampaigns]);
 
   useEffect(() => {
     loadCampaigns();
-  }, []);
+  }, [loadCampaigns]);
 
   useEffect(() => {
     if (selectedCampaign) {
@@ -39,18 +80,35 @@ const CampaignsPage: React.FC = () => {
     }
   }, [selectedCampaign]);
 
+  useEffect(() => {
+    if (
+      selectedCampaign &&
+      !campaigns.some((c) => c.id === selectedCampaign.id)
+    ) {
+      setSelectedCampaign(null);
+      setCampaignStats(null);
+      setCampaignContacts([]);
+    }
+  }, [campaigns, selectedCampaign]);
+
   // WebSocket event handlers for real-time campaign updates
   const handleCampaignUpdate = useCallback(
     (data: any) => {
       console.log("Campaign update received:", data);
 
-      setCampaigns((prev) =>
-        prev.map((campaign) =>
+      setCampaigns((prev) => {
+        const updated = prev.map((campaign) =>
           campaign.id === data.campaign_id
             ? { ...campaign, status: data.status }
             : campaign,
-        ),
-      );
+        );
+
+        const filtered = statusFilter
+          ? updated.filter((campaign) => campaign.status === statusFilter)
+          : updated;
+
+        return sortCampaigns(filtered);
+      });
 
       // Update selected campaign if it's the one that changed
       if (selectedCampaign?.id === data.campaign_id) {
@@ -61,8 +119,15 @@ const CampaignsPage: React.FC = () => {
         loadCampaignDetails(data.campaign_id);
       }
     },
-    [selectedCampaign],
+    [selectedCampaign, sortCampaigns, statusFilter],
   );
+
+  const handleTabChange = useCallback((tabKey: CampaignTabKey) => {
+    setActiveTab(tabKey);
+    setSelectedCampaign(null);
+    setCampaignStats(null);
+    setCampaignContacts([]);
+  }, []);
 
   const handleCampaignProgress = useCallback(
     (data: any) => {
@@ -93,18 +158,6 @@ const CampaignsPage: React.FC = () => {
   useWSEvent(EventType.CAMPAIGN_COMPLETED, handleCampaignUpdate);
   useWSEvent(EventType.CAMPAIGN_FAILED, handleCampaignUpdate);
   useWSEvent(EventType.CAMPAIGN_PROGRESS, handleCampaignProgress);
-
-  const loadCampaigns = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.listCampaigns();
-      setCampaigns(data);
-    } catch (error) {
-      console.error("Помилка завантаження кампаній:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadCampaignDetails = async (campaignId: string) => {
     try {
@@ -244,14 +297,28 @@ const CampaignsPage: React.FC = () => {
       {/* Campaigns List */}
       <div className="w-1/3 border border-gray-200 rounded-lg bg-white overflow-hidden flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-800">Розсилки</h2>
             <button
               onClick={() => setShowCreateForm(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              className="px-3 py-1 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
               + Створити
             </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto">
+            {CAMPAIGN_TABS.map((tab) => {
+              const isActive = tab.key === activeTab;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors whitespace-nowrap ${isActive ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 

@@ -75,13 +75,14 @@ async def create_campaign(
 
 @router.get("", response_model=list[CampaignResponse])
 async def list_campaigns(
+    status: CampaignStatus | None = None,
     uow: UnitOfWork = Depends(get_uow),
 ):
     """
-    List all campaigns.
+    List campaigns filtered by status. Newest scheduled/created first.
     """
     async with uow:
-        campaigns = await uow.campaigns.get_all()
+        campaigns = await uow.campaigns.list_with_status(status=status)
         return campaigns
 
 
@@ -203,7 +204,8 @@ async def schedule_campaign(
         campaign.updated_at = now
         uow.session.add(campaign)
 
-        logger.info(f"Campaign scheduled: {campaign_id} at {data.scheduled_at}")
+        logger.info(
+            f"Campaign scheduled: {campaign_id} at {data.scheduled_at}")
 
         return campaign
 

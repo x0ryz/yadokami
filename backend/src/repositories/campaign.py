@@ -44,6 +44,22 @@ class CampaignRepository(BaseRepository[Campaign]):
         result = await self.session.exec(stmt)
         return list(result.all())
 
+    async def list_with_status(
+        self, status: CampaignStatus | None = None
+    ) -> list[Campaign]:
+        """List campaigns filtered by status and sorted by schedule/create time"""
+        stmt = select(Campaign)
+        if status:
+            stmt = stmt.where(Campaign.status == status)
+
+        stmt = stmt.order_by(
+            Campaign.scheduled_at.desc(),
+            Campaign.created_at.desc(),
+        )
+
+        result = await self.session.exec(stmt)
+        return list(result.all())
+
     async def update_stats(
         self,
         campaign_id: UUID,
@@ -129,6 +145,7 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
 
     async def count_all(self, campaign_id: UUID) -> int:
         """Count all contacts in campaign"""
-        stmt = select(CampaignContact).where(CampaignContact.campaign_id == campaign_id)
+        stmt = select(CampaignContact).where(
+            CampaignContact.campaign_id == campaign_id)
         result = await self.session.exec(stmt)
         return len(list(result.all()))

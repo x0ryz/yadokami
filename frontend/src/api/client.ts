@@ -13,6 +13,7 @@ import {
   CampaignStats,
   CampaignSchedule,
   CampaignContactResponse,
+  CampaignStatus,
   MessageResponse,
   MessageSendResponse,
   Template,
@@ -220,8 +221,10 @@ export class ApiClient {
   }
 
   // Campaigns
-  async listCampaigns(): Promise<CampaignResponse[]> {
-    const response = await this.client.get<CampaignResponse[]>("/campaigns");
+  async listCampaigns(status?: CampaignStatus): Promise<CampaignResponse[]> {
+    const response = await this.client.get<CampaignResponse[]>("/campaigns", {
+      params: { status },
+    });
     return response.data;
   }
 
