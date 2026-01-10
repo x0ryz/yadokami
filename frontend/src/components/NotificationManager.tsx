@@ -1,59 +1,84 @@
-import { useLocation, useSearchParams } from "react-router-dom"; // 1. Додаємо імпорти
+import { useLocation, useSearchParams } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 import { useWSEvent } from "../services/useWebSocket";
 import { EventType } from "../services/websocket";
 
-const truncate = (str: string, length: number) => {
-  if (!str) return "";
-  return str.length > length ? str.substring(0, length) + "..." : str;
-};
-
 export const NotificationManager = () => {
-  // 2. Отримуємо поточний URL та параметри
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
+  // 1. Повідомлення
   useWSEvent(EventType.NEW_MESSAGE, (data) => {
-    // 3. Отримуємо ID відкритого контакту з URL (підставте свій параметр, наприклад 'id' або 'contactId')
     const activeContactId =
       searchParams.get("id") || searchParams.get("contact_id");
-
-    // 4. Перевіряємо: чи ми на сторінці контактів І чи відкритий саме цей чат
-    const isChatOpen =
+    if (
       location.pathname.includes("/contacts") &&
-      activeContactId === data.contact_id;
-
-    // Якщо чат відкритий — виходимо і НЕ показуємо тост
-    if (isChatOpen) {
+      activeContactId === data.contact_id
+    )
       return;
-    }
-
-    // Стандартна логіка відображення
-    const phone = data.phone || data.contact?.phone_number || "Невідомий";
-    const body =
-      data.body || (data.type === "image" ? "[Зображення]" : "[Повідомлення]");
 
     toast.success(
       <div>
         <p className="font-bold text-sm">Нове повідомлення</p>
-        <p className="text-xs text-gray-600">Від: {phone}</p>
-        <p className="text-sm mt-1">{truncate(body, 50)}</p>
+        <p className="text-xs text-gray-600">{data.phone}</p>
+        <p className="text-sm mt-1 truncate">{data.body}</p>
       </div>,
       { duration: 4000 },
     );
   });
 
-  // ... (решта коду без змін: CAMPAIGN_COMPLETED і т.д.)
+  // 2. Шаблони (дані прийшли з вебхука: name, status)
+  useWSEvent(EventType.TEMPLATE_STATUS_UPDATE, (data) => {
+    const isApproved = data.status === "APPROVED";
+    const isRejected = data.status === "REJECTED";
+
+    toast(
+      <div>
+        <p className="font-bold text-sm">Шаблон: {data.name}</p>
+        <p
+          className={`text-sm mt-1 ${isApproved ? "text-green-600" : isRejected ? "text-red-600" : "text-yellow-600"}`}
+        >
+          Статус: {data.status}
+        </p>
+        {data.reason && (
+          <p className="text-xs text-gray-500 mt-1">{data.reason}</p>
+        )}
+      </div>,
+      { icon: isApproved ? "✅" : isRejected ? "❌" : "⚠️", duration: 5000 },
+    );
+  });
+
+  // 3. Якість номеру
+  useWSEvent(EventType.PHONE_STATUS_UPDATE, (data) => {
+    const isBad = data.event === "FLAGGED" || data.event === "DOWNGRADE";
+
+    toast(
+      <div>
+        <p className="font-bold text-sm">Номер: {data.display_phone_number}</p>
+        <p className="text-xs mt-1">Подія: {data.event}</p>
+        <p className="text-xs">Ліміт: {data.messaging_limit_tier}</p>
+      </div>,
+      { icon: isBad ? "📉" : "📈", duration: 5000 },
+    );
+  });
+
+  // 4. Акаунт
+  useWSEvent(EventType.WABA_STATUS_UPDATE, (data) => {
+    toast(
+      <div>
+        <p className="font-bold text-sm">WABA Акаунт</p>
+        <p className="text-sm">Новий статус: {data.status}</p>
+      </div>,
+      { icon: "🏢" },
+    );
+  });
 
   return (
     <Toaster
       position="bottom-right"
       toastOptions={{
         className: "bg-white shadow-lg border border-gray-100",
-        style: {
-          padding: "16px",
-          color: "#333",
-        },
+        style: { padding: "16px", color: "#333" },
       }}
     />
   );

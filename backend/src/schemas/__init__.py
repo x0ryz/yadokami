@@ -50,13 +50,16 @@ from .waba import (
 
 # Webhooks
 from .webhooks import (
+    MetaAccountReviewUpdate,
     MetaChange,
     MetaContact,
     MetaEntry,
     MetaMedia,
     MetaMessage,
+    MetaPhoneNumberQualityUpdate,
     MetaProfile,
     MetaStatus,
+    MetaTemplateUpdate,
     MetaText,
     MetaValue,
     MetaWebhookPayload,
@@ -100,13 +103,16 @@ __all__ = [
     "WabaSyncRequest",
     "WabaSyncResponse",
     # Webhooks
+    "MetaAccountReviewUpdate",
     "WebhookEvent",
     "MetaWebhookPayload",
     "MetaEntry",
     "MetaChange",
     "MetaValue",
     "MetaMessage",
+    "MetaPhoneNumberQualityUpdate",
     "MetaStatus",
+    "MetaTemplateUpdate",
     "MetaContact",
     "MetaProfile",
     "MetaMedia",

@@ -83,3 +83,44 @@ class NotificationService:
             campaign_id=campaign_id, batch_number=batch_number, **stats
         )
         await self._publish(event.to_dict())
+
+    async def notify_template_update(
+        self, template_id: str, name: str, status: str, reason: str | None = None
+    ):
+        event = {
+            "event": "template_status_update",
+            "data": {
+                "id": template_id,
+                "name": name,
+                "status": status,
+                "reason": reason,
+            },
+            "timestamp": get_utc_now().isoformat(),
+        }
+        await self._publish(event)
+
+    async def notify_waba_update(self, waba_id: str, status: str, event_type: str):
+        event = {
+            "event": "waba_status_update",
+            "data": {
+                "waba_id": waba_id,
+                "status": status,
+                "type": event_type,
+            },
+            "timestamp": get_utc_now().isoformat(),
+        }
+        await self._publish(event)
+
+    async def notify_phone_update(
+        self, phone_number: str, event: str, current_limit: str
+    ):
+        event = {
+            "event": "phone_status_update",
+            "data": {
+                "display_phone_number": phone_number,
+                "event": event,
+                "messaging_limit_tier": current_limit,
+            },
+            "timestamp": get_utc_now().isoformat(),
+        }
+        await self._publish(event)

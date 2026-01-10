@@ -126,13 +126,41 @@ class MetaStatus(MetaBaseModel):
     conversation: dict[str, Any] | None = None
 
 
+class MetaTemplateUpdate(MetaBaseModel):
+    event: str
+    message_template_id: str
+    message_template_name: str
+    message_template_language: str
+    reason: str | None = None
+
+
+class MetaPhoneNumberQualityUpdate(MetaBaseModel):
+    display_phone_number: str
+    event: str
+    current_limit: str
+
+
+class MetaAccountReviewUpdate(MetaBaseModel):
+    decision: str
+    update_time: str | None = None
+
+
+class MetaAccountBanUpdate(MetaBaseModel):
+    ban_info: dict[str, Any] | None = None
+
+
 class MetaValue(MetaBaseModel):
     messaging_product: str
     metadata: dict[str, Any]
+
     contacts: list[MetaContact] = Field(default_factory=list)
     messages: list[MetaMessage] = Field(default_factory=list)
     statuses: list[MetaStatus] = Field(default_factory=list)
-    errors: list[dict[str, Any]] | None = None
+
+    message_template_status_update: MetaTemplateUpdate | None = None
+    phone_number_quality_update: MetaPhoneNumberQualityUpdate | None = None
+    account_review_update: MetaAccountReviewUpdate | None = None
+    account_update: MetaAccountBanUpdate | None = None
 
 
 class MetaChange(MetaBaseModel):

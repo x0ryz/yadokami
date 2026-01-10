@@ -1,9 +1,24 @@
 import base64
 
 from loguru import logger
+from sqlmodel import select
 from src.core.uow import UnitOfWork
-from src.models import MessageDirection, MessageStatus, get_utc_now
-from src.schemas import MetaMessage, MetaStatus, MetaWebhookPayload
+from src.models import (
+    MessageDirection,
+    MessageStatus,
+    Template,
+    WabaAccount,
+    WabaPhoneNumber,
+    get_utc_now,
+)
+from src.schemas import (
+    MetaAccountReviewUpdate,
+    MetaMessage,
+    MetaPhoneNumberQualityUpdate,
+    MetaStatus,
+    MetaTemplateUpdate,
+    MetaWebhookPayload,
+)
 from src.services.media.service import MediaService
 from src.services.notifications.service import NotificationService
 
@@ -22,15 +37,30 @@ class MessageProcessorService:
     async def process_webhook(self, webhook: MetaWebhookPayload):
         """Маршрутизація подій вебхука"""
         for entry in webhook.entry:
+            waba_id = entry.id
+
             for change in entry.changes:
                 value = change.value
 
-                if value.statuses:
-                    await self._handle_statuses(value.statuses)
+                if value.message_template_status_update:
+                    await self._handle_template_update(
+                        value.message_template_status_update
+                    )
+
+                elif value.account_review_update:
+                    await self._handle_account_review(
+                        waba_id, value.account_review_update
+                    )
+
+                elif value.phone_number_quality_update:
+                    await self._handle_phone_quality(value.phone_number_quality_update)
 
                 if value.messages:
                     phone_id = value.metadata.get("phone_number_id")
                     await self._handle_messages(value.messages, phone_id)
+
+                if value.statuses:
+                    await self._handle_statuses(value.statuses)
 
     async def _handle_statuses(self, statuses: list[MetaStatus]):
         status_map = {
@@ -268,3 +298,64 @@ class MessageProcessorService:
         except Exception as e:
             logger.error(f"Fuzzy search error: {e}")
             return None
+
+    async def _handle_template_update(self, update: MetaTemplateUpdate):
+        """Сповіщення про зміну статусу шаблону на основі вебхука"""
+        await self.notifier.notify_template_update(
+            template_id=update.message_template_id,
+            name=update.message_template_name,
+            status=update.event,
+            reason=update.reason,
+        )
+
+        async with self.uow:
+            stmt = select(Template).where(
+                Template.meta_template_id == update.message_template_id
+            )
+            result = await self.uow.session.exec(stmt)
+            template = result.first()
+            if template:
+                template.status = update.event
+                template.updated_at = get_utc_now()
+                self.uow.session.add(template)
+                await self.uow.commit()
+
+    async def _handle_account_review(
+        self, waba_id: str, update: MetaAccountReviewUpdate
+    ):
+        """Сповіщення про статус акаунту"""
+        await self.notifier.notify_waba_update(
+            waba_id=waba_id, status=update.decision, event_type="REVIEW_UPDATE"
+        )
+
+        async with self.uow:
+            stmt = select(WabaAccount).where(WabaAccount.waba_id == waba_id)
+            result = await self.uow.session.exec(stmt)
+            account = result.first()
+            if account:
+                account.account_review_status = update.decision
+                self.uow.session.add(account)
+                await self.uow.commit()
+
+    async def _handle_phone_quality(self, update: MetaPhoneNumberQualityUpdate):
+        """Сповіщення про якість номеру"""
+        await self.notifier.notify_phone_update(
+            phone_number=update.display_phone_number,
+            event=update.event,
+            current_limit=update.current_limit,
+        )
+
+        async with self.uow:
+            stmt = select(WabaPhoneNumber).where(
+                WabaPhoneNumber.display_phone_number == update.display_phone_number
+            )
+            result = await self.uow.session.exec(stmt)
+            phone = result.first()
+            if phone:
+                phone.messaging_limit_tier = update.current_limit
+                if update.event == "FLAGGED":
+                    phone.quality_rating = "RED"
+                elif update.event == "UNFLAGGED":
+                    phone.quality_rating = "GREEN"
+                self.uow.session.add(phone)
+                await self.uow.commit()

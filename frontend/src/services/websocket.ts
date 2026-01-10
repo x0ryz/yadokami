@@ -22,6 +22,9 @@ export enum EventType {
   SYNC_COMPLETED = "sync_completed",
   STATUS_UPDATE = "status_update",
   MESSAGE_REACTION = "message_reaction",
+  TEMPLATE_STATUS_UPDATE = "template_status_update",
+  WABA_STATUS_UPDATE = "waba_status_update",
+  PHONE_STATUS_UPDATE = "phone_status_update",
 }
 
 export interface WSEvent {
