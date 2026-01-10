@@ -9,6 +9,18 @@ import {
   TagUpdate,
 } from "../../types";
 import TagSelector from "../tags/TagSelector";
+import {
+  Check,
+  CheckCheck,
+  Clock,
+  AlertCircle,
+  Paperclip,
+  Send,
+  Reply,
+  X,
+  Edit2,
+  Link,
+} from "lucide-react";
 
 interface ChatWindowProps {
   contact: Contact;
@@ -93,15 +105,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const getStatusIcon = (status: MessageStatus) => {
     switch (status) {
       case MessageStatus.SENT:
-        return "✓";
+        return <Check className="w-3 h-3" />;
       case MessageStatus.DELIVERED:
-        return "✓✓";
+        return <CheckCheck className="w-3 h-3" />;
       case MessageStatus.READ:
-        return "✓✓";
+        return <CheckCheck className="w-3 h-3" />;
       case MessageStatus.FAILED:
-        return "!";
+        return <AlertCircle className="w-3 h-3" />;
       default:
-        return "🕒";
+        return <Clock className="w-3 h-3" />;
     }
   };
 
@@ -119,7 +131,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
+      <div className="p-6 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">
             {contact.name || contact.phone_number}
@@ -128,12 +140,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         {/* Блок тегів */}
-        <div className="flex items-center gap-2 relative">
-          <div className="flex gap-1 flex-wrap justify-end max-w-[300px]">
+        <div className="flex items-center gap-3 relative">
+          <div className="flex gap-2 flex-wrap justify-end max-w-[300px]">
             {contact.tags?.map((tag) => (
               <span
                 key={tag.id}
-                className="text-xs px-2 py-1 rounded-full text-white whitespace-nowrap"
+                className="text-xs px-3 py-1 rounded-lg text-white whitespace-nowrap shadow-sm"
                 style={{ backgroundColor: tag.color }}
               >
                 {tag.name}
@@ -143,14 +155,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
           <button
             onClick={() => setIsTagSelectorOpen(!isTagSelectorOpen)}
-            className={`p-1.5 rounded-full transition-colors ${
+            className={`p-2 rounded-lg transition-all shadow-sm ${
               isTagSelectorOpen
                 ? "bg-blue-100 text-blue-600"
                 : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
             }`}
             title="Редагувати теги"
           >
-            ✏️
+            <Edit2 className="w-4 h-4" />
           </button>
 
           <TagSelector
@@ -167,9 +179,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
+      <div className="flex-1 overflow-y-auto p-6 space-y-3 relative">
         {loading ? (
           <div className="flex items-center justify-center h-full text-gray-500">
+            <Clock className="w-5 h-5 mr-2 animate-spin" />
             Завантаження...
           </div>
         ) : !messages.length ? (
@@ -191,16 +204,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 className={`flex ${isOutbound ? "justify-end" : "justify-start"} group ${hasReaction ? "mb-4" : "mb-1"}`}
               >
                 <div
-                  className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-lg shadow-sm text-sm leading-relaxed
+                  className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-xl shadow-md text-sm leading-relaxed
                     ${
                       isOutbound
-                        ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
-                        : "bg-white text-gray-900 rounded-tl-none"
+                        ? "bg-[#d9fdd3] text-gray-900 rounded-tr-sm"
+                        : "bg-white text-gray-900 rounded-tl-sm"
                     }`}
                 >
                   {repliedMessage && (
                     <div
-                      className={`mb-2 p-2 rounded border-l-4 text-xs cursor-pointer opacity-80
+                      className={`mb-2 p-3 rounded-lg border-l-4 text-xs cursor-pointer opacity-90
                       ${isOutbound ? "bg-[#cfe9c6] border-green-600" : "bg-gray-100 border-gray-400"}`}
                       onClick={() => {
                         const el = document.getElementById(
@@ -212,7 +225,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         });
                       }}
                     >
-                      <div className="font-bold text-gray-700 mb-1">
+                      <div className="font-semibold text-gray-700 mb-1">
                         {repliedMessage.direction === MessageDirection.OUTBOUND
                           ? "Ви"
                           : contact.name || contact.phone_number}
@@ -244,9 +257,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                                 href={media.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
+                                className="flex items-center gap-3 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition-colors border border-black/5"
                               >
-                                <span className="text-xl">📎</span>
+                                <Paperclip className="w-5 h-5 text-gray-600" />
                                 <span className="underline decoration-dotted">
                                   {media.file_name}
                                 </span>
@@ -287,10 +300,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                   <button
                     onClick={() => setReplyTo(message)}
                     className={`absolute top-0 ${isOutbound ? "-left-8" : "-right-8"}
-                      opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity`}
+                      opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all`}
                     title="Відповісти"
                   >
-                    ↩️
+                    <Reply className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -301,10 +314,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="bg-gray-100 p-2">
+      <div className="bg-white p-4 border-t border-gray-200">
         {/* Reply Preview */}
         {replyTo && !selectedFile && (
-          <div className="flex justify-between items-center bg-white p-2 mb-2 rounded-lg border-l-4 border-blue-500 shadow-sm mx-2">
+          <div className="flex justify-between items-center bg-gray-50 p-3 mb-3 rounded-xl border-l-4 border-blue-500 shadow-sm">
             <div className="text-sm overflow-hidden">
               <span className="text-blue-600 font-semibold text-xs block mb-0.5">
                 Відповідь для:{" "}
@@ -318,18 +331,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
             <button
               onClick={() => setReplyTo(null)}
-              className="text-gray-400 hover:text-gray-600 p-1"
+              className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1.5 rounded-lg transition-colors"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
         {/* File Preview */}
         {selectedFile && (
-          <div className="flex justify-between items-center bg-white p-2 mb-2 rounded-lg border-l-4 border-green-500 shadow-sm mx-2">
+          <div className="flex justify-between items-center bg-gray-50 p-3 mb-3 rounded-xl border-l-4 border-green-500 shadow-sm">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="bg-gray-100 p-2 rounded text-xl">📎</div>
+              <div className="bg-white p-2.5 rounded-lg shadow-sm">
+                <Paperclip className="w-5 h-5 text-gray-600" />
+              </div>
               <div className="text-sm">
                 <span className="font-semibold text-gray-700 block">
                   Відправка файлу:
@@ -344,14 +359,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 setSelectedFile(null);
                 if (fileInputRef.current) fileInputRef.current.value = "";
               }}
-              className="text-gray-400 hover:text-gray-600 p-1"
+              className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 p-1.5 rounded-lg transition-colors"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        <div className="flex gap-2 items-end bg-white p-2 rounded-2xl border border-gray-200 shadow-sm">
+        <div className="flex gap-3 items-end bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm">
           <input
             type="file"
             ref={fileInputRef}
@@ -361,10 +376,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center"
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
             title="Прикріпити файл"
           >
-            🔗
+            <Paperclip className="w-5 h-5" />
           </button>
 
           <textarea
@@ -386,9 +401,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           <button
             onClick={handleSend}
             disabled={!messageText.trim() && !selectedFile}
-            className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex-shrink-0 w-10 h-10 flex items-center justify-center"
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 disabled:text-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
           >
-            ➤
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </div>

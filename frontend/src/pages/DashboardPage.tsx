@@ -155,11 +155,10 @@ const DashboardPage: React.FC = () => {
               onClick={handleSync}
               disabled={syncing}
               title="Оновити статус WABA"
-              className={`p-1.5 rounded-md transition-all duration-200 ${
-                syncing
+              className={`p-1.5 rounded-md transition-all duration-200 ${syncing
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 active:scale-95"
-              }`}
+                }`}
             >
               <RefreshCw
                 className={`w-5 h-5 ${syncing ? "animate-spin" : ""}`}
@@ -256,7 +255,7 @@ const DashboardPage: React.FC = () => {
 
           <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar">
             {wabaStatus?.phone_numbers &&
-            wabaStatus.phone_numbers.length > 0 ? (
+              wabaStatus.phone_numbers.length > 0 ? (
               <ul className="space-y-3">
                 {wabaStatus.phone_numbers.map((phone) => (
                   <li

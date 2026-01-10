@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Tag, TagCreate, TagUpdate } from "../../types";
+import { Plus } from "lucide-react";
 
 interface TagSelectorProps {
   availableTags: Tag[];
@@ -41,11 +42,10 @@ const ColorPalette = ({
           key={color}
           type="button"
           onClick={() => onSelect(color)}
-          className={`w-5 h-5 rounded-full transition-transform hover:scale-110 focus:outline-none ${
-            selectedColor === color
+          className={`w-5 h-5 rounded-full transition-transform hover:scale-110 focus:outline-none ${selectedColor === color
               ? "ring-2 ring-offset-1 ring-gray-400 scale-110"
               : "ring-1 ring-transparent hover:ring-gray-200"
-          }`}
+            }`}
           style={{ backgroundColor: color }}
           title={color}
         />
@@ -53,11 +53,10 @@ const ColorPalette = ({
 
       {/* Кнопка власного кольору */}
       <div
-        className={`relative w-5 h-5 rounded-full overflow-hidden transition-transform hover:scale-110 ${
-          !PRESET_COLORS.includes(selectedColor)
+        className={`relative w-5 h-5 rounded-full overflow-hidden transition-transform hover:scale-110 ${!PRESET_COLORS.includes(selectedColor)
             ? "ring-2 ring-offset-1 ring-gray-400 scale-110"
             : "ring-1 ring-gray-200"
-        }`}
+          }`}
         title="Власний колір"
       >
         <div
@@ -253,11 +252,10 @@ const TagSelector: React.FC<TagSelectorProps> = ({
               >
                 <div className="flex items-center gap-2 flex-1">
                   <div
-                    className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${
-                      isSelected
+                    className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${isSelected
                         ? "bg-blue-600 border-blue-600"
                         : "border-gray-300 bg-white"
-                    }`}
+                      }`}
                   >
                     {isSelected && (
                       <svg
@@ -318,9 +316,9 @@ const TagSelector: React.FC<TagSelectorProps> = ({
               cancelEditing(); // Закриваємо редагування якщо воно активне
               setIsAddingNew(true);
             }}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 w-full px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 w-full px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <span className="text-lg font-bold leading-none">+</span>
+            <Plus className="w-4 h-4" />
             <span>Створити новий тег</span>
           </button>
         ) : (

@@ -1,5 +1,6 @@
 import React from "react";
 import { Contact, MessageDirection, MessageStatus } from "../../types";
+import { Check, CheckCheck, AlertCircle, Clock } from "lucide-react";
 
 interface ContactListProps {
   contacts: Contact[];
@@ -54,17 +55,17 @@ const ContactList: React.FC<ContactListProps> = ({
     if (!status) return null;
     switch (status) {
       case MessageStatus.SENT:
-        return <span className="text-gray-400">✓</span>;
+        return <Check className="w-4 h-4 text-gray-400" />;
       case MessageStatus.DELIVERED:
-        return <span className="text-gray-400">✓✓</span>;
+        return <CheckCheck className="w-4 h-4 text-gray-400" />;
       case MessageStatus.READ:
-        return <span className="text-blue-500 font-bold">✓✓</span>;
+        return <CheckCheck className="w-4 h-4 text-blue-500" />;
       case MessageStatus.FAILED:
-        return <span className="text-red-500">!</span>;
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
       case MessageStatus.PENDING:
-        return <span className="text-gray-300">🕒</span>;
+        return <Clock className="w-4 h-4 text-gray-300" />;
       default:
-        return <span className="text-gray-300">🕒</span>;
+        return <Clock className="w-4 h-4 text-gray-300" />;
     }
   };
 
@@ -88,8 +89,8 @@ const ContactList: React.FC<ContactListProps> = ({
           <div
             key={contact.id}
             onClick={() => onSelectContact(contact)}
-            className={`p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-              isSelected ? "bg-blue-50 border-blue-200" : ""
+            className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-all ${
+              isSelected ? "bg-blue-50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"
             }`}
           >
             <div className="flex justify-between items-baseline mb-1">
@@ -110,11 +111,11 @@ const ContactList: React.FC<ContactListProps> = ({
 
             {/* ВІДОБРАЖЕННЯ ТЕГІВ */}
             {contact.tags && contact.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-1">
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {contact.tags.map((tag) => (
                   <span
                     key={tag.id}
-                    className="text-[10px] px-1.5 py-0.5 rounded-full text-white"
+                    className="text-[10px] px-2 py-0.5 rounded-lg text-white shadow-sm"
                     style={{ backgroundColor: tag.color }}
                   >
                     {tag.name}
@@ -124,9 +125,9 @@ const ContactList: React.FC<ContactListProps> = ({
             )}
 
             <div className="flex justify-between items-center">
-              <div className="flex-1 min-w-0 flex items-center text-sm text-gray-600 h-5">
+              <div className="flex-1 min-w-0 flex items-center text-sm text-gray-600 gap-2">
                 {isOutbound && (
-                  <span className="mr-1 text-xs flex-shrink-0">
+                  <span className="flex-shrink-0">
                     {getStatusIcon(contact.last_message_status)}
                   </span>
                 )}
@@ -142,7 +143,7 @@ const ContactList: React.FC<ContactListProps> = ({
               </div>
 
               {contact.unread_count > 0 && (
-                <span className="ml-2 bg-green-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center flex-shrink-0">
+                <span className="ml-2 bg-green-500 text-white text-xs font-bold rounded-lg px-2.5 py-1 min-w-[24px] text-center flex-shrink-0 shadow-sm">
                   {contact.unread_count}
                 </span>
               )}
