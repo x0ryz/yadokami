@@ -3,10 +3,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
-
 from src.models import (
     Campaign,
     CampaignContact,
+    CampaignDeliveryStatus,
     CampaignStatus,
     ContactStatus,
     get_utc_now,
@@ -102,7 +102,7 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
             select(CampaignContact)
             .where(
                 CampaignContact.campaign_id == campaign_id,
-                CampaignContact.status == ContactStatus.NEW,
+                CampaignContact.status == CampaignDeliveryStatus.QUEUED,
             )
             .options(selectinload(CampaignContact.contact))
             .limit(limit)
@@ -145,7 +145,6 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
 
     async def count_all(self, campaign_id: UUID) -> int:
         """Count all contacts in campaign"""
-        stmt = select(CampaignContact).where(
-            CampaignContact.campaign_id == campaign_id)
+        stmt = select(CampaignContact).where(CampaignContact.campaign_id == campaign_id)
         result = await self.session.exec(stmt)
         return len(list(result.all()))

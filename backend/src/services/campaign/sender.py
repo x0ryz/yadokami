@@ -4,6 +4,7 @@ from loguru import logger
 from src.core.uow import UnitOfWork
 from src.models import (
     Campaign,
+    CampaignDeliveryStatus,
     CampaignStatus,
     ContactStatus,
     get_utc_now,
@@ -216,7 +217,7 @@ class CampaignSenderService:
                 return
 
             now = get_utc_now()
-            contact_link.status = ContactStatus.FAILED
+            contact_link.status = CampaignDeliveryStatus.FAILED
             contact_link.error_message = error_msg[:500]
             contact_link.retry_count += 1
             contact_link.updated_at = now
@@ -247,7 +248,7 @@ class CampaignSenderService:
         now = get_utc_now()
 
         # Update link
-        link.status = ContactStatus.FAILED
+        link.status = CampaignDeliveryStatus.FAILED
         link.error_message = error_msg[:500]
         link.retry_count += 1
         link.updated_at = now
@@ -375,7 +376,7 @@ class CampaignSenderService:
             logger.debug(f"Campaign {campaign.id} not running")
             return False
 
-        if contact_link.status == ContactStatus.SENT:
+        if contact_link.status == CampaignDeliveryStatus.SENT:
             logger.debug(f"Contact link {contact_link.id} already sent")
             return False
 
@@ -400,14 +401,15 @@ class CampaignSenderService:
     def _update_after_send(self, contact_link, contact, campaign, message_id, now):
         """Update entities after successful message send."""
         # Update contact link
-        contact_link.status = ContactStatus.SENT
+        contact_link.status = CampaignDeliveryStatus.SENT
         contact_link.message_id = message_id
         contact_link.updated_at = now
         self.uow.session.add(contact_link)
 
         # Update contact
         contact.last_message_at = now
-        contact.status = ContactStatus.SENT
+        if contact.status == ContactStatus.NEW:
+            contact.status = ContactStatus.ACTIVE
         contact.updated_at = now
         self.uow.session.add(contact)
 

@@ -21,14 +21,18 @@ class MessageStatus(str, Enum):
 
 
 class ContactStatus(str, Enum):
-    NEW = "new"
-    SCHEDULED = "scheduled"
+    ACTIVE = "active"
+    OPTED_OUT = "opted_out"
+    BLOCKED = "blocked"
+    ARCHIVED = "archived"
+
+
+class CampaignDeliveryStatus(str, Enum):
+    QUEUED = "queued"
     SENT = "sent"
     DELIVERED = "delivered"
     READ = "read"
     FAILED = "failed"
-    OPTED_OUT = "opted_out"
-    BLOCKED = "blocked"
 
 
 class CampaignStatus(str, Enum):

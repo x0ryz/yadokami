@@ -1,4 +1,5 @@
 from .base import (
+    CampaignDeliveryStatus,
     CampaignStatus,
     ContactStatus,
     MessageDirection,
@@ -18,6 +19,7 @@ __all__ = [
     "MessageDirection",
     "MessageStatus",
     "ContactStatus",
+    "CampaignDeliveryStatus",
     "CampaignStatus",
     "WabaAccount",
     "WabaPhoneNumber",

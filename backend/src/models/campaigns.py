@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
 
-from .base import CampaignStatus, ContactStatus, get_utc_now
+from .base import CampaignDeliveryStatus, CampaignStatus, get_utc_now
 
 if TYPE_CHECKING:
     from .contacts import Contact
@@ -60,7 +60,9 @@ class CampaignContact(SQLModel, table=True):
     campaign_id: UUID = Field(foreign_key="campaigns.id", index=True)
     contact_id: UUID = Field(foreign_key="contacts.id", index=True)
 
-    status: ContactStatus = Field(default=ContactStatus.NEW, index=True)
+    status: CampaignDeliveryStatus = Field(
+        default=CampaignDeliveryStatus.QUEUED, index=True
+    )
     message_id: Optional[UUID] = Field(default=None, foreign_key="messages.id")
 
     error_message: Optional[str] = None

@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
-from src.models.base import CampaignStatus, ContactStatus
+from src.models.base import CampaignDeliveryStatus, CampaignStatus
 
 from .base import TimestampMixin, UUIDMixin
 
@@ -127,7 +127,7 @@ class CampaignContactResponse(BaseModel):
     contact_id: UUID
     phone_number: str
     name: str | None = None
-    status: ContactStatus
+    status: CampaignDeliveryStatus
     error_message: str | None = None
     retry_count: int
 

@@ -46,7 +46,8 @@ class ContactRepository(BaseRepository[Contact]):
 
         stmt = (
             stmt.order_by(
-                desc(Contact.unread_count), desc(Contact.last_message_at).nulls_last()
+                desc(Contact.unread_count), desc(
+                    Contact.last_message_at).nulls_last()
             )
             .offset(offset)
             .limit(limit)
@@ -68,7 +69,8 @@ class ContactRepository(BaseRepository[Contact]):
         if await self.get_by_phone(data.phone_number):
             return None
 
-        contact = Contact(**data.model_dump(exclude={"tag_ids"}), source="manual")
+        contact = Contact(
+            **data.model_dump(exclude={"tag_ids"}), source="manual")
         if data.tag_ids:
             tags_query = select(Tag).where(Tag.id.in_(data.tag_ids))
             tags_result = await self.session.exec(tags_query)

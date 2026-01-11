@@ -21,7 +21,7 @@ class Contact(SQLModel, table=True):
     name: Optional[str] = None
     unread_count: int = Field(default=0)
 
-    status: ContactStatus = Field(default=ContactStatus.NEW)
+    status: ContactStatus = Field(default=ContactStatus.ACTIVE)
 
     last_message_id: Optional[UUID] = Field(
         default=None, foreign_key="messages.id", nullable=True

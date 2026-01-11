@@ -40,6 +40,7 @@ class ContactUpdate(BaseModel):
     """Contact update schema"""
 
     name: str | None = Field(default=None, max_length=255)
+    status: ContactStatus | None = None
     tag_ids: list[UUID] | None = None
 
     model_config = ConfigDict(
