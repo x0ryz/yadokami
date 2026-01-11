@@ -10,6 +10,8 @@ import {
 } from "../../types";
 import TagSelector from "../tags/TagSelector";
 import ContactActionsMenu from "./ContactActionsMenu";
+import { apiClient } from "../../api";
+import { Check, X } from "lucide-react";
 
 interface ChatWindowProps {
   contact: Contact;
@@ -49,6 +51,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isTagSelectorOpen, setIsTagSelectorOpen] = useState(false);
 
+  // Editing Name State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,6 +63,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     setSelectedFile(null);
     setMessageText("");
     setIsTagSelectorOpen(false); // Закриваємо селектор при зміні контакту
+    setIsEditingName(false);
   }, [contact.id]);
 
   useEffect(() => {
@@ -123,15 +130,64 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return messages.find((m) => m.id === replyId);
   };
 
+  const handleSaveName = async () => {
+    if (editedName !== contact.name) {
+      try {
+        const updated = await apiClient.updateContact(contact.id, {
+          name: editedName,
+        });
+        if (onContactUpdate) {
+          onContactUpdate(updated);
+        }
+      } catch (error) {
+        console.error("Failed to update name:", error);
+        alert("Не вдалося оновити ім'я");
+      }
+    }
+    setIsEditingName(false);
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            {contact.name || contact.phone_number}
-          </h2>
-          <p className="text-sm text-gray-600">{contact.phone_number}</p>
+          {isEditingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveName();
+                  if (e.key === "Escape") setIsEditingName(false);
+                }}
+              />
+              <button
+                onClick={handleSaveName}
+                className="text-green-600 hover:text-green-800 p-1"
+                title="Save"
+              >
+                <Check size={18} />
+              </button>
+              <button
+                onClick={() => setIsEditingName(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+                title="Cancel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : (
+            <h2 className="text-lg font-semibold text-gray-900">
+              {contact.name || contact.phone_number}
+            </h2>
+          )}
+          {!isEditingName && (
+            <p className="text-sm text-gray-600">{contact.phone_number}</p>
+          )}
         </div>
 
         {/* Блок тегів */}
@@ -153,6 +209,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             onUpdate={(c) => onContactUpdate && onContactUpdate(c)}
             onDelete={(id) => onContactDelete && onContactDelete(id)}
             onEditTags={() => setIsTagSelectorOpen(true)}
+            onEditNameClick={() => {
+              setEditedName(contact.name || "");
+              setIsEditingName(true);
+            }}
           />
 
           <TagSelector

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MoreVertical, Tag, Ban, Archive, Trash2, Undo } from "lucide-react";
+import { MoreVertical, Tag, Ban, Archive, Trash2, Undo, Edit } from "lucide-react";
 import { Contact, ContactStatus } from "../../types";
 import { apiClient } from "../../api";
 
@@ -8,6 +8,7 @@ interface ContactActionsMenuProps {
   onUpdate: (contact: Contact) => void;
   onDelete: (contactId: string) => void;
   onEditTags: () => void;
+  onEditNameClick: () => void;
 }
 
 const ContactActionsMenu: React.FC<ContactActionsMenuProps> = ({
@@ -15,6 +16,7 @@ const ContactActionsMenu: React.FC<ContactActionsMenuProps> = ({
   onUpdate,
   onDelete,
   onEditTags,
+  onEditNameClick,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -75,6 +77,18 @@ const ContactActionsMenu: React.FC<ContactActionsMenuProps> = ({
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 border border-gray-100 py-1">
+          {/* Edit Name */}
+          <button
+            onClick={() => {
+              onEditNameClick();
+              setIsOpen(false);
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <Edit size={16} />
+            Змінити ім'я
+          </button>
+
           {/* Edit Tags */}
           <button
             onClick={() => {

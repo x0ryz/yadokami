@@ -2,7 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import desc, or_, select
-from src.models import Contact, Tag, get_utc_now
+from src.models import Contact, ContactStatus, Tag, get_utc_now
 from src.repositories.base import BaseRepository
 from src.schemas.contacts import ContactCreate, ContactUpdate
 
@@ -33,7 +33,11 @@ class ContactRepository(BaseRepository[Contact]):
         return contact
 
     async def get_paginated(
-        self, limit: int, offset: int, tag_ids: list[UUID] | None = None
+        self,
+        limit: int,
+        offset: int,
+        tag_ids: list[UUID] | None = None,
+        status: ContactStatus | None = None,
     ) -> list[Contact]:
         """Get contacts sorted by unread count and last activity"""
 
@@ -41,13 +45,19 @@ class ContactRepository(BaseRepository[Contact]):
             selectinload(Contact.last_message), selectinload(Contact.tags)
         )
 
+        if status:
+            stmt = stmt.where(Contact.status == status)
+        else:
+            stmt = stmt.where(
+                Contact.status.not_in([ContactStatus.BLOCKED, ContactStatus.ARCHIVED])
+            )
+
         if tag_ids:
             stmt = stmt.where(Contact.tags.any(Tag.id.in_(tag_ids)))
 
         stmt = (
             stmt.order_by(
-                desc(Contact.unread_count), desc(
-                    Contact.last_message_at).nulls_last()
+                desc(Contact.unread_count), desc(Contact.last_message_at).nulls_last()
             )
             .offset(offset)
             .limit(limit)
@@ -69,8 +79,7 @@ class ContactRepository(BaseRepository[Contact]):
         if await self.get_by_phone(data.phone_number):
             return None
 
-        contact = Contact(
-            **data.model_dump(exclude={"tag_ids"}), source="manual")
+        contact = Contact(**data.model_dump(exclude={"tag_ids"}), source="manual")
         if data.tag_ids:
             tags_query = select(Tag).where(Tag.id.in_(data.tag_ids))
             tags_result = await self.session.exec(tags_query)

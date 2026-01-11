@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from src.core.dependencies import get_chat_service, get_uow
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
+from src.models.base import ContactStatus
 from src.schemas import MessageResponse
 from src.schemas.contacts import (
     ContactCreate,
@@ -21,11 +22,14 @@ async def get_contacts(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     tags: list[UUID] = Query(default=None),
+    status: ContactStatus | None = Query(default=None),
     uow: UnitOfWork = Depends(get_uow),
 ):
     """Get all contacts sorted by unread count and last activity"""
     async with uow:
-        contacts = await uow.contacts.get_paginated(limit, offset, tag_ids=tags)
+        contacts = await uow.contacts.get_paginated(
+            limit, offset, tag_ids=tags, status=status
+        )
         return contacts
 
 

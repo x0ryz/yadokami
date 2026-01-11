@@ -44,7 +44,10 @@ class Contact(SQLModel, table=True):
     )
 
     last_message: Optional["Message"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "Contact.last_message_id"}
+        sa_relationship_kwargs={
+            "foreign_keys": "Contact.last_message_id",
+            "post_update": True,
+        }
     )
 
     messages: List["Message"] = Relationship(
