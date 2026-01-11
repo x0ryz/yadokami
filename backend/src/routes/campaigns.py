@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from loguru import logger
-from src.core.dependencies import get_uow
+from src.core.dependencies import get_contact_import_service, get_uow
 from src.core.exceptions import BadRequestError, NotFoundError, ServiceUnavailableError
 from src.core.uow import UnitOfWork
 from src.models import CampaignStatus, get_utc_now
@@ -388,6 +388,7 @@ async def import_contacts_from_file(
     campaign_id: UUID,
     file: UploadFile = File(...),
     uow: UnitOfWork = Depends(get_uow),
+    import_service: ContactImportService = Depends(get_contact_import_service),
 ):
     """
     Import contacts from CSV or Excel file.
@@ -421,7 +422,6 @@ async def import_contacts_from_file(
 
         # Determine file type
         filename = file.filename.lower()
-        import_service = ContactImportService(uow)
 
         if filename.endswith(".csv"):
             result = await import_service.import_from_csv(campaign_id, content)
@@ -445,6 +445,7 @@ async def add_contacts_manually(
     campaign_id: UUID,
     contacts: list[ContactImport],
     uow: UnitOfWork = Depends(get_uow),
+    import_service: ContactImportService = Depends(get_contact_import_service),
 ):
     """
     Add contacts manually via API (without file upload).
@@ -476,8 +477,6 @@ async def add_contacts_manually(
             raise BadRequestError(
                 detail="Can only add contacts to DRAFT campaigns",
             )
-
-        import_service = ContactImportService(uow)
         result = await import_service.add_contacts_manual(campaign_id, contacts)
 
         logger.info(

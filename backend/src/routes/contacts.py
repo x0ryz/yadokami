@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
-from src.core.dependencies import get_uow
+from src.core.dependencies import get_chat_service, get_uow
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
 from src.schemas import MessageResponse
@@ -12,7 +12,6 @@ from src.schemas.contacts import (
     ContactUpdate,
 )
 from src.services.messaging.chat import ChatService
-from src.services.notifications.service import NotificationService
 
 router = APIRouter(tags=["Contacts"])
 
@@ -93,12 +92,9 @@ async def get_chat_history(
     contact_id: UUID,
     limit: int = 50,
     offset: int = 0,
-    uow: UnitOfWork = Depends(get_uow),
+    chat_service: ChatService = Depends(get_chat_service),
 ):
     """Get chat history with a contact."""
-    notifier = NotificationService()
-    chat_service = ChatService(uow, notifier)
-
     messages = await chat_service.get_chat_history(contact_id, limit, offset)
     return messages
 
@@ -106,9 +102,7 @@ async def get_chat_history(
 @router.post("/contacts/{contact_id}/read", status_code=204)
 async def mark_contact_read(
     contact_id: UUID,
-    uow: UnitOfWork = Depends(get_uow),
+    chat_service: ChatService = Depends(get_chat_service),
 ):
     """Mark all messages from a contact as read."""
-    notifier = NotificationService()
-    chat_service = ChatService(uow, notifier)
     await chat_service.mark_conversation_as_read(contact_id)
