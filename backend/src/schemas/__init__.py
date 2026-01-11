@@ -42,6 +42,7 @@ from .templates import TemplateListResponse, TemplateResponse
 
 # WABA
 from .waba import (
+    WabaAccountRequest,
     WabaAccountResponse,
     WabaPhoneResponse,
     WabaSyncRequest,
@@ -98,6 +99,7 @@ __all__ = [
     "TemplateResponse",
     "TemplateListResponse",
     # WABA
+    "WabaAccountRequest",
     "WabaAccountResponse",
     "WabaPhoneResponse",
     "WabaSyncRequest",

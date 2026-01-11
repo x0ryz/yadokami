@@ -7,6 +7,11 @@ class WabaRepository(BaseRepository[WabaAccount]):
     def __init__(self, session):
         super().__init__(session, WabaAccount)
 
+    async def get_account(self) -> WabaAccount | None:
+        """Отримує єдиний WABA акаунт, якщо він існує."""
+        stmt = select(WabaAccount).limit(1)
+        return (await self.session.exec(stmt)).first()
+
     async def get_default_phone(self) -> WabaPhoneNumber | None:
         stmt = select(WabaPhoneNumber)
         return (await self.session.exec(stmt)).first()

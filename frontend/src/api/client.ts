@@ -222,6 +222,11 @@ export class ApiClient {
     return response.data;
   }
 
+  async updateWabaAccount(data: { waba_id: string; name?: string }): Promise<any> {
+    const response = await this.client.post("/waba/account", data);
+    return response.data;
+  }
+
   // Campaigns
   async listCampaigns(status?: CampaignStatus): Promise<CampaignResponse[]> {
     const response = await this.client.get<CampaignResponse[]>("/campaigns", {

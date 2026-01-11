@@ -5,6 +5,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from .base import TimestampMixin, UUIDMixin
 
 
+class WabaAccountRequest(BaseModel):
+    """Схема для створення або оновлення WABA акаунту"""
+
+    waba_id: str
+    name: str
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"waba_id": "1234567890", "name": "My Business Name"}
+        }
+    )
+
+
 class WabaSyncRequest(BaseModel):
     """WABA sync request"""
 
