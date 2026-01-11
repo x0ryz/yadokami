@@ -1,5 +1,6 @@
 // Enums
 export enum ContactStatus {
+  ACTIVE = "active",
   NEW = "new",
   SCHEDULED = "scheduled",
   SENT = "sent",
@@ -8,6 +9,7 @@ export enum ContactStatus {
   FAILED = "failed",
   OPTED_OUT = "opted_out",
   BLOCKED = "blocked",
+  ARCHIVED = "archived",
 }
 
 export enum CampaignStatus {
@@ -83,6 +85,7 @@ export interface ContactCreate {
 
 export interface ContactUpdate {
   name?: string | null;
+  status?: ContactStatus;
   tag_ids?: string[] | null;
 }
 

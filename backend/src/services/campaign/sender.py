@@ -408,8 +408,6 @@ class CampaignSenderService:
 
         # Update contact
         contact.last_message_at = now
-        if contact.status == ContactStatus.NEW:
-            contact.status = ContactStatus.ACTIVE
         contact.updated_at = now
         self.uow.session.add(contact)
 

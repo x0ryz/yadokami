@@ -463,6 +463,27 @@ const ContactsPage: React.FC = () => {
     }
   };
 
+  const handleContactUpdate = (updatedContact: Contact) => {
+    setContacts((prev) => 
+      prev.map(c => c.id === updatedContact.id ? updatedContact : c)
+    );
+    if (selectedContact?.id === updatedContact.id) {
+      setSelectedContact(updatedContact);
+    }
+  };
+
+  const handleContactDelete = (contactId: string) => {
+    setContacts((prev) => prev.filter(c => c.id !== contactId));
+    if (selectedContact?.id === contactId) {
+      setSelectedContact(null);
+      setSearchParams(params => {
+        const newParams = new URLSearchParams(params);
+        newParams.delete("contact_id");
+        return newParams;
+      });
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <div className="mb-4">
@@ -524,6 +545,8 @@ const ContactsPage: React.FC = () => {
               loading={messagesLoading}
               onSendMessage={handleSendMessage}
               onSendMedia={handleSendMedia}
+              onContactUpdate={handleContactUpdate}
+              onContactDelete={handleContactDelete}
               // Tag Props
               availableTags={availableTags}
               onUpdateTags={handleUpdateContactTags}
