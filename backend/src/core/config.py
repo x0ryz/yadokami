@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     VERIFY_TOKEN: str
     META_APP_SECRET: str
 
+    WABA_ID: str
+    WABA_NAME: str = "Business Account"
+
     R2_ACCOUNT_ID: str
     R2_ACCESS_KEY: str
     R2_SECRET_KEY: str
@@ -25,7 +28,8 @@ class Settings(BaseSettings):
 
     SENTRY_DSN: str | None = None
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8")
 
     @computed_field
     @property

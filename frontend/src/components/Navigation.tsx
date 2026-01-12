@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, Send, Settings } from "lucide-react";
+import { LayoutDashboard, Users, FileText, SendToBack } from "lucide-react";
 
 const Navigation: React.FC = () => {
   const location = useLocation();
@@ -52,17 +52,8 @@ const Navigation: React.FC = () => {
                 "/campaigns",
               )}`}
             >
-              <Send className="w-4 h-4" />
+              <SendToBack className="w-4 h-4" />
               Розсилки
-            </Link>
-            <Link
-              to="/settings"
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${isActive(
-                "/settings",
-              )}`}
-            >
-              <Settings className="w-4 h-4" />
-              Налаштування
             </Link>
           </div>
         </div>

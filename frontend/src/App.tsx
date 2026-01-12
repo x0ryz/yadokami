@@ -9,7 +9,6 @@ import DashboardPage from "./pages/DashboardPage";
 import ContactsPage from "./pages/ContactsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import CampaignsPage from "./pages/CampaignsPage";
-import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
@@ -21,7 +20,6 @@ function App() {
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Layout>
     </Router>
