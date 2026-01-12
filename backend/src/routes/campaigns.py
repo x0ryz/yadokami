@@ -27,16 +27,8 @@ async def create_campaign(
     data: CampaignCreate,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Create a new campaign.
-
-    - **name**: Campaign name (required)
-    - **message_type**: "text" or "template" (default: template)
-    - **template_id**: UUID of template (required if message_type=template)
-    - **message_body**: Text body (required if message_type=text)
-    """
+    """Create a new campaign."""
     async with uow:
-        # Validation
         if data.message_type == "template" and not data.template_id:
             raise BadRequestError(
                 detail="template_id is required when message_type is 'template'"
@@ -47,7 +39,6 @@ async def create_campaign(
                 detail="message_body is required when message_type is 'text'",
             )
 
-        # Verify template exists if provided
         if data.template_id:
             template = await uow.templates.get_by_id(data.template_id)
             if not template:
@@ -59,7 +50,6 @@ async def create_campaign(
                     detail="Template must be APPROVED",
                 )
 
-        # Create campaign
         campaign = await uow.campaigns.create(
             name=data.name,
             message_type=data.message_type,
@@ -69,7 +59,6 @@ async def create_campaign(
         )
 
         logger.info(f"Campaign created: {campaign.id} - {campaign.name}")
-
         return campaign
 
 
@@ -78,9 +67,6 @@ async def list_campaigns(
     status: CampaignStatus | None = None,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    List campaigns filtered by status. Newest scheduled/created first.
-    """
     async with uow:
         campaigns = await uow.campaigns.list_with_status(status=status)
         return campaigns
@@ -91,15 +77,10 @@ async def get_campaign(
     campaign_id: UUID,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Get campaign by ID.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
-
         return campaign
 
 
@@ -109,14 +90,8 @@ async def update_campaign(
     data: CampaignUpdate,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Update campaign details.
-
-    Only campaigns in DRAFT status can be updated.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
@@ -125,17 +100,13 @@ async def update_campaign(
                 detail="Can only update campaigns in DRAFT status",
             )
 
-        # Update fields
         update_data = data.model_dump(exclude_unset=True)
-
         for key, value in update_data.items():
             setattr(campaign, key, value)
 
         campaign.updated_at = get_utc_now()
         uow.session.add(campaign)
-
         logger.info(f"Campaign updated: {campaign_id}")
-
         return campaign
 
 
@@ -144,14 +115,8 @@ async def delete_campaign(
     campaign_id: UUID,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Delete a campaign.
-
-    Only campaigns in DRAFT status can be deleted.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
@@ -161,7 +126,6 @@ async def delete_campaign(
             )
 
         await uow.campaigns.delete(campaign_id)
-
         logger.info(f"Campaign deleted: {campaign_id}")
 
 
@@ -171,14 +135,8 @@ async def schedule_campaign(
     data: CampaignSchedule,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Schedule a campaign to run at a specific time.
-
-    Campaign must be in DRAFT status and have contacts.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
@@ -192,7 +150,6 @@ async def schedule_campaign(
                 detail="Cannot schedule campaign with no contacts",
             )
 
-        # Validate scheduled time is in the future
         now = get_utc_now()
         if data.scheduled_at <= now:
             raise BadRequestError(
@@ -204,9 +161,7 @@ async def schedule_campaign(
         campaign.updated_at = now
         uow.session.add(campaign)
 
-        logger.info(
-            f"Campaign scheduled: {campaign_id} at {data.scheduled_at}")
-
+        logger.info(f"Campaign scheduled: {campaign_id} at {data.scheduled_at}")
         return campaign
 
 
@@ -216,14 +171,8 @@ async def start_campaign_now(
     request: Request,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Start campaign immediately.
-
-    Campaign must be in DRAFT or SCHEDULED status and have contacts.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
@@ -242,11 +191,8 @@ async def start_campaign_now(
             logger.info(f"Campaign start published: {campaign_id}")
         except Exception as e:
             logger.error(f"Failed to publish campaign start: {e}")
-            raise ServiceUnavailableError(
-                detail="Failed to start campaign",
-            )
+            raise ServiceUnavailableError(detail="Failed to start campaign")
 
-        # Status will be updated by worker
         return campaign
 
 
@@ -255,26 +201,18 @@ async def pause_campaign(
     campaign_id: UUID,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Pause a running campaign.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.RUNNING:
-            raise BadRequestError(
-                detail="Can only pause running campaigns",
-            )
+            raise BadRequestError(detail="Can only pause running campaigns")
 
         campaign.status = CampaignStatus.PAUSED
         campaign.updated_at = get_utc_now()
         uow.session.add(campaign)
-
         logger.info(f"Campaign paused: {campaign_id}")
-
         return campaign
 
 
@@ -284,28 +222,20 @@ async def resume_campaign(
     request: Request,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Resume a paused campaign.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
         if campaign.status != CampaignStatus.PAUSED:
-            raise BadRequestError(
-                detail="Can only resume paused campaigns",
-            )
+            raise BadRequestError(detail="Can only resume paused campaigns")
 
         try:
             await handle_campaign_resume_task.kiq(str(campaign_id))
             logger.info(f"Campaign resume published: {campaign_id}")
         except Exception as e:
             logger.error(f"Failed to publish campaign resume: {e}")
-            raise ServiceUnavailableError(
-                detail="Failed to resume campaign",
-            )
+            raise ServiceUnavailableError(detail="Failed to resume campaign")
 
         return campaign
 
@@ -315,16 +245,11 @@ async def get_campaign_stats(
     campaign_id: UUID,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Get detailed campaign statistics.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
-        # Calculate progress
         progress = 0.0
         if campaign.total_contacts > 0:
             progress = (campaign.sent_count / campaign.total_contacts) * 100
@@ -353,12 +278,8 @@ async def get_campaign_contacts(
     offset: int = 0,
     uow: UnitOfWork = Depends(get_uow),
 ):
-    """
-    Get contacts in a campaign with pagination.
-    """
     async with uow:
         campaign = await uow.campaigns.get_by_id(campaign_id)
-
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
@@ -392,44 +313,27 @@ async def import_contacts_from_file(
 ):
     """
     Import contacts from CSV or Excel file.
-
-    **CSV Format:**
-    ```
-    phone_number,name,tags
-    +380671234567,John Doe,vip;active
-    0671234568,Jane Smith,new
-    ```
-
-    **Excel Format:**
-    Same columns as CSV, first row must be headers.
-
-    **Supported formats:** .csv, .xlsx, .xls
+    Uses unified pandas importer.
     """
     async with uow:
-        # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
-        # Only allow import for DRAFT campaigns
         if campaign.status != CampaignStatus.DRAFT:
             raise BadRequestError(
                 detail="Can only import contacts to DRAFT campaigns",
             )
 
-        # Read file
         content = await file.read()
 
-        # Determine file type
-        filename = file.filename.lower()
+        # ВИПРАВЛЕНО: Виклик універсального методу import_file
+        result = await import_service.import_file(campaign_id, content, file.filename)
 
-        if filename.endswith(".csv"):
-            result = await import_service.import_from_csv(campaign_id, content)
-        elif filename.endswith((".xlsx", ".xls")):
-            result = await import_service.import_from_excel(campaign_id, content)
-        else:
+        # Якщо файл не підтримався, сервіс поверне помилку в result.errors
+        if result.errors and any("Unsupported file format" in e for e in result.errors):
             raise BadRequestError(
-                detail="Unsupported file format. Use .csv, .xlsx or .xls",
+                detail="Unsupported file format. Use .csv, .xlsx or .xls"
             )
 
         logger.info(
@@ -447,36 +351,17 @@ async def add_contacts_manually(
     uow: UnitOfWork = Depends(get_uow),
     import_service: ContactImportService = Depends(get_contact_import_service),
 ):
-    """
-    Add contacts manually via API (without file upload).
-
-    Example:
-    ```json
-    [
-      {
-        "phone_number": "+380671234567",
-        "name": "John Doe",
-        "tags": ["vip", "active"]
-      },
-      {
-        "phone_number": "0671234568",
-        "name": "Jane Smith",
-        "tags": ["new"]
-      }
-    ]
-    ```
-    """
+    """Add contacts manually via API."""
     async with uow:
-        # Check campaign exists
         campaign = await uow.campaigns.get_by_id(campaign_id)
         if not campaign:
             raise NotFoundError(detail="Campaign not found")
 
-        # Only allow import for DRAFT campaigns
         if campaign.status != CampaignStatus.DRAFT:
             raise BadRequestError(
                 detail="Can only add contacts to DRAFT campaigns",
             )
+
         result = await import_service.add_contacts_manual(campaign_id, contacts)
 
         logger.info(

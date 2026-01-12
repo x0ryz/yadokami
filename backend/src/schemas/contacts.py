@@ -14,6 +14,7 @@ class ContactCreate(BaseModel):
 
     phone_number: str = Field(..., min_length=10, max_length=15)
     name: str | None = Field(default=None, max_length=255)
+    link: str | None = Field(default=None)
     tag_ids: list[UUID] = Field(default=[])
 
     @field_validator("phone_number")
@@ -40,6 +41,7 @@ class ContactUpdate(BaseModel):
     """Contact update schema"""
 
     name: str | None = Field(default=None, max_length=255)
+    link: str | None = Field(default=None)
     status: ContactStatus | None = None
     tag_ids: list[UUID] | None = None
 
@@ -57,6 +59,7 @@ class ContactImport(BaseModel):
     """Schema for importing contacts from file"""
 
     phone_number: str
+    link: str | None = None
     name: str | None = None
     tags: list[str] = Field(default_factory=list)
 
@@ -65,6 +68,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
     """Full contact information for API"""
 
     phone_number: str
+    link: str | None = None
     name: str | None = None
     unread_count: int
     status: ContactStatus
@@ -93,6 +97,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
 
 class ContactListResponse(BaseModel):
     id: UUID
+    link: str | None = None
     phone_number: str
     name: str | None = None
     unread_count: int
@@ -126,7 +131,8 @@ class ContactImportResult(BaseModel):
     total: int = Field(..., description="Total contacts in file")
     imported: int = Field(..., description="Successfully imported")
     skipped: int = Field(..., description="Skipped (duplicates)")
-    errors: list[str] = Field(default_factory=list, description="Error messages")
+    errors: list[str] = Field(default_factory=list,
+                              description="Error messages")
 
     model_config = ConfigDict(
         json_schema_extra={

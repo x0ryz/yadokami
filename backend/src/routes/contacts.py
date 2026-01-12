@@ -1,6 +1,8 @@
 from uuid import UUID
+import io
+import pandas as pd
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, UploadFile, File
 from src.core.dependencies import get_chat_service, get_uow
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.core.uow import UnitOfWork
@@ -11,6 +13,7 @@ from src.schemas.contacts import (
     ContactListResponse,
     ContactResponse,
     ContactUpdate,
+    ContactImportResult,
 )
 from src.services.messaging.chat import ChatService
 
@@ -51,6 +54,100 @@ async def create_contact(data: ContactCreate, uow: UnitOfWork = Depends(get_uow)
         await uow.commit()
         await uow.session.refresh(contact)
         return contact
+
+
+@router.post("/contacts/import", response_model=ContactImportResult)
+async def import_contacts(
+    file: UploadFile = File(...),
+    uow: UnitOfWork = Depends(get_uow)
+):
+    """Import contacts from Excel or CSV file."""
+    if not file.filename:
+        raise BadRequestError("File must have a name")
+
+    content = await file.read()
+
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content))
+        elif file.filename.endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise BadRequestError("Unsupported file format. Use CSV or Excel.")
+    except Exception as e:
+        raise BadRequestError(f"Error reading file: {str(e)}")
+
+    # Normalize columns to lower case
+    df.columns = df.columns.astype(str).str.lower()
+
+    imported_count = 0
+    skipped_count = 0
+    errors = []
+
+    async with uow:
+        for index, row in df.iterrows():
+            try:
+                # Basic extraction logic - try to find columns
+                phone = None
+                name = None
+                link = None
+
+                # Naive column matching
+                for col in df.columns:
+                    val = str(row[col]) if not pd.isna(row[col]) else None
+                    if not val:
+                        continue
+
+                    if 'phone' in col or 'телефон' in col:
+                        phone = val
+                    elif 'name' in col or 'ім\'я' in col or 'имя' in col:
+                        name = val
+                    elif 'link' in col or 'url' in col or 'силка' in col:
+                        link = val
+
+                if not phone:
+                    # Try to treat the first column as phone if explicitly not found?
+                    # Or just skip. User said "I have such file", assuming headers exist.
+                    # If simplified, maybe user wants us to guess column by content?
+                    # Sticking to column names for now as it's safer.
+                    continue
+
+                # Clean phone number
+                phone_digits = "".join(c for c in phone if c.isdigit())
+
+                if len(phone_digits) < 10:
+                    errors.append(
+                        f"Row {index + 1}: Invalid phone number '{phone}'")
+                    continue
+
+                # Check duplicate
+                existing = await uow.contacts.get_by_phone(phone_digits)
+                if existing:
+                    skipped_count += 1
+                    continue
+
+                # Create contact
+                contact_data = ContactCreate(
+                    phone_number=phone_digits,
+                    name=name,
+                    link=link,
+                    tag_ids=[]
+                )
+
+                await uow.contacts.create_manual(contact_data)
+                imported_count += 1
+
+            except Exception as e:
+                errors.append(f"Row {index + 1}: {str(e)}")
+
+        await uow.commit()
+
+    return ContactImportResult(
+        total=len(df),
+        imported=imported_count,
+        skipped=skipped_count,
+        errors=errors
+    )
 
 
 @router.get("/contacts/{contact_id}", response_model=ContactResponse)

@@ -17,6 +17,7 @@ asyncio
 tenacity
 gunicorn
 openpyxl
+pandas
 python-multipart
 taskiq
 taskiq-redis

@@ -19,6 +19,7 @@ class Contact(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     phone_number: str = Field(unique=True, index=True)
     name: Optional[str] = None
+    link: Optional[str] = None
     unread_count: int = Field(default=0)
 
     status: ContactStatus = Field(default=ContactStatus.ACTIVE)
