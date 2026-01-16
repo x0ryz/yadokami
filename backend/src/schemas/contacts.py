@@ -73,6 +73,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
     unread_count: int
     status: ContactStatus
     last_message_at: datetime | None = None
+    last_incoming_message_at: datetime | None = None
     source: str | None = None
     tags: list[TagResponse] = Field(default_factory=list)
 
@@ -86,6 +87,7 @@ class ContactResponse(UUIDMixin, TimestampMixin):
                 "unread_count": 3,
                 "status": "new",
                 "last_message_at": "2024-01-15T10:30:00Z",
+                "last_incoming_message_at": "2024-01-15T10:30:00Z",
                 "source": "import_csv",
                 "tags": [{"id": "...", "name": "vip", "color": "#FF0000"}],
                 "created_at": "2024-01-01T00:00:00Z",
@@ -102,6 +104,7 @@ class ContactListResponse(BaseModel):
     name: str | None = None
     unread_count: int
     last_message_at: datetime | None = None
+    last_incoming_message_at: datetime | None = None
     tags: list[TagResponse] = Field(default_factory=list)
     last_message: Any | None = Field(default=None, exclude=True)
 
@@ -131,8 +134,7 @@ class ContactImportResult(BaseModel):
     total: int = Field(..., description="Total contacts in file")
     imported: int = Field(..., description="Successfully imported")
     skipped: int = Field(..., description="Skipped (duplicates)")
-    errors: list[str] = Field(default_factory=list,
-                              description="Error messages")
+    errors: list[str] = Field(default_factory=list, description="Error messages")
 
     model_config = ConfigDict(
         json_schema_extra={

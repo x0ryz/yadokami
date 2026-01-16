@@ -11,7 +11,146 @@ import {
 import TagSelector from "../tags/TagSelector";
 import ContactActionsMenu from "./ContactActionsMenu";
 import { apiClient } from "../../api";
-import { Check, X, CheckCheck, Clock, Paperclip, CornerUpLeft, Link, Send } from "lucide-react";
+import {
+  Check,
+  X,
+  CheckCheck,
+  Clock,
+  Paperclip,
+  CornerUpLeft,
+  Link,
+  Send,
+  Lock,
+} from "lucide-react";
+
+// --- КОМПОНЕНТ ТАЙМЕРА З КІЛЬЦЕМ (SVG RING) ---
+const SessionTimer: React.FC<{ lastIncomingAt: string | null | undefined }> = ({
+  lastIncomingAt,
+}) => {
+  const [timeLeft, setTimeLeft] = useState<{
+    totalMs: number;
+    hours: number;
+    minutes: number;
+    expired: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      if (!lastIncomingAt) {
+        setTimeLeft({ totalMs: 0, hours: 0, minutes: 0, expired: true });
+        return;
+      }
+
+      const lastMsgTime = new Date(lastIncomingAt).getTime();
+      const expirationTime = lastMsgTime + 24 * 60 * 60 * 1000; // +24 години
+      const now = Date.now();
+      const diff = expirationTime - now;
+
+      if (diff <= 0) {
+        setTimeLeft({ totalMs: 0, hours: 0, minutes: 0, expired: true });
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setTimeLeft({ totalMs: diff, hours, minutes, expired: false });
+      }
+    };
+
+    calculateTime();
+    // Оновлюємо кожну секунду, щоб кільце плавно рухалось (або хоча б хвилини)
+    const interval = setInterval(calculateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [lastIncomingAt]);
+
+  if (!timeLeft) return null;
+
+  // Налаштування SVG кільця
+  const size = 42; // Розмір віджета в пікселях
+  const strokeWidth = 3;
+  const center = size / 2;
+  const radius = center - strokeWidth;
+  const circumference = 2 * Math.PI * radius;
+
+  // Прогрес (від 1 до 0, де 1 - це повні 24 години)
+  const maxTime = 24 * 60 * 60 * 1000;
+  const progress = Math.max(0, Math.min(1, timeLeft.totalMs / maxTime));
+  const strokeDashoffset = circumference * (1 - progress);
+
+  // Вибір кольору
+  let strokeColor = "text-green-500"; // > 4 годин
+  if (timeLeft.hours < 4) strokeColor = "text-amber-500"; // < 4 годин
+  if (timeLeft.hours < 1) strokeColor = "text-red-500"; // < 1 години
+
+  if (timeLeft.expired) {
+    return (
+      <div
+        className="flex items-center justify-center bg-gray-100 rounded-full border border-gray-300 text-gray-400"
+        style={{ width: size, height: size }}
+        title="Сесія закрита (24г). Потрібен шаблон."
+      >
+        <Lock size={16} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width: size, height: size }}
+    >
+      {/* Фоновe сіре кільце */}
+      <svg
+        className="absolute inset-0 transform -rotate-90"
+        width={size}
+        height={size}
+      >
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="transparent"
+          stroke="#e5e7eb" // gray-200
+          strokeWidth={strokeWidth}
+        />
+        {/* Активне кольорове кільце */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="transparent"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          className={`transition-all duration-1000 ease-linear ${strokeColor}`}
+        />
+      </svg>
+
+      {/* Текст по центру */}
+      <div
+        className="z-10 flex flex-col items-center justify-center leading-none"
+        title={`Залишилось: ${timeLeft.hours}г ${timeLeft.minutes}хв`}
+      >
+        <span className={`text-[11px] font-bold ${strokeColor}`}>
+          {timeLeft.hours > 0 ? (
+            <>
+              {timeLeft.hours}
+              <span className="text-[9px] font-normal">г</span>
+            </>
+          ) : (
+            <>
+              {timeLeft.minutes}
+              <span className="text-[9px] font-normal">хв</span>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// --- ОСНОВНИЙ КОМПОНЕНТ ---
 
 interface ChatWindowProps {
   contact: Contact;
@@ -20,11 +159,9 @@ interface ChatWindowProps {
   onSendMessage: (phone: string, text: string, replyToId?: string) => void;
   onSendMedia: (phone: string, file: File, caption?: string) => void;
 
-  // New props for contact actions
   onContactUpdate?: (contact: Contact) => void;
   onContactDelete?: (contactId: string) => void;
 
-  // Нові пропси для роботи з тегами
   availableTags: Tag[];
   onUpdateTags: (tagIds: string[]) => void;
   onCreateTag: (tag: TagCreate) => Promise<void>;
@@ -58,11 +195,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Перевірка чи сесія активна (для блокування інпуту)
+  const isSessionExpired = React.useMemo(() => {
+    if (!contact.last_incoming_message_at) return true;
+    const end =
+      new Date(contact.last_incoming_message_at).getTime() +
+      24 * 60 * 60 * 1000;
+    return Date.now() > end;
+  }, [contact.last_incoming_message_at]);
+
   useEffect(() => {
     scrollToBottom("auto");
     setSelectedFile(null);
     setMessageText("");
-    setIsTagSelectorOpen(false); // Закриваємо селектор при зміні контакту
+    setIsTagSelectorOpen(false);
     setIsEditingName(false);
   }, [contact.id]);
 
@@ -151,46 +297,53 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
-        <div>
-          {isEditingName ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveName();
-                  if (e.key === "Escape") setIsEditingName(false);
-                }}
-              />
-              <button
-                onClick={handleSaveName}
-                className="text-green-600 hover:text-green-800 p-1"
-                title="Save"
-              >
-                <Check size={18} />
-              </button>
-              <button
-                onClick={() => setIsEditingName(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-                title="Cancel"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          ) : (
-            <h2 className="text-lg font-semibold text-gray-900">
-              {contact.name || contact.phone_number}
-            </h2>
-          )}
-          {!isEditingName && (
-            <p className="text-sm text-gray-600">{contact.phone_number}</p>
-          )}
+        {/* ЛІВА ЧАСТИНА: Таймер + Інфо про контакт */}
+        <div className="flex items-center gap-3">
+          {/* ТАЙМЕР СЕСІЇ */}
+          <SessionTimer lastIncomingAt={contact.last_incoming_message_at} />
+
+          {/* ІМ'Я ТА ТЕЛЕФОН */}
+          <div>
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveName();
+                    if (e.key === "Escape") setIsEditingName(false);
+                  }}
+                />
+                <button
+                  onClick={handleSaveName}
+                  className="text-green-600 hover:text-green-800 p-1"
+                  title="Save"
+                >
+                  <Check size={18} />
+                </button>
+                <button
+                  onClick={() => setIsEditingName(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                  title="Cancel"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <h2 className="text-lg font-semibold text-gray-900 leading-tight">
+                {contact.name || contact.phone_number}
+              </h2>
+            )}
+            {!isEditingName && (
+              <p className="text-sm text-gray-600">{contact.phone_number}</p>
+            )}
+          </div>
         </div>
 
-        {/* Блок тегів */}
+        {/* ПРАВА ЧАСТИНА: Теги та Дії */}
         <div className="flex items-center gap-2 relative">
           <div className="flex gap-1 flex-wrap justify-end max-w-[300px]">
             {contact.tags?.map((tag) => (
@@ -204,8 +357,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             ))}
           </div>
 
-          <ContactActionsMenu 
-            contact={contact} 
+          <ContactActionsMenu
+            contact={contact}
             onUpdate={(c) => onContactUpdate && onContactUpdate(c)}
             onDelete={(id) => onContactDelete && onContactDelete(id)}
             onEditTags={() => setIsTagSelectorOpen(true)}
@@ -415,18 +568,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           </div>
         )}
 
-        <div className="flex gap-2 items-end bg-white p-2 rounded-2xl border border-gray-200 shadow-sm">
+        <div
+          className={`flex gap-2 items-end bg-white p-2 rounded-2xl border border-gray-200 shadow-sm ${isSessionExpired ? "bg-gray-50" : ""}`}
+        >
           <input
             type="file"
             ref={fileInputRef}
             className="hidden"
             onChange={handleFileSelect}
+            disabled={isSessionExpired} // Блокування файлів
           />
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center"
+            className={`p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center ${isSessionExpired ? "opacity-50 cursor-not-allowed" : ""}`}
             title="Прикріпити файл"
+            disabled={isSessionExpired}
           >
             <Link className="w-5 h-5" />
           </button>
@@ -441,18 +598,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               }
             }}
             placeholder={
-              selectedFile ? "Додати підпис..." : "Написати повідомлення..."
+              isSessionExpired
+                ? "Сесія закрита (24г). Використайте шаблон."
+                : selectedFile
+                  ? "Додати підпис..."
+                  : "Написати повідомлення..."
             }
-            className="flex-1 max-h-32 px-2 py-2 bg-transparent outline-none text-gray-800 placeholder-gray-400 overflow-y-auto resize-none"
+            className="flex-1 max-h-32 px-2 py-2 bg-transparent outline-none text-gray-800 placeholder-gray-400 overflow-y-auto resize-none disabled:text-gray-400"
             rows={1}
             style={{ minHeight: "40px" }}
+            disabled={isSessionExpired} // Блокування тексту
           />
           <button
             onClick={handleSend}
-            disabled={!messageText.trim() && !selectedFile}
+            disabled={
+              (!messageText.trim() && !selectedFile) || isSessionExpired
+            }
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="w-5 h-5" />
+            {isSessionExpired ? (
+              <Lock className="w-5 h-5" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
           </button>
         </div>
       </div>

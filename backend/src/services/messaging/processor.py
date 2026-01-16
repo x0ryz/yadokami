@@ -200,7 +200,8 @@ class MessageProcessorService:
                         body = interactive.list_reply.title
                 elif msg.type == "location":
                     loc = msg.location
-                    body = f"Location: {loc.name or ''} {loc.address or ''} ({loc.latitude}, {loc.longitude})".strip()
+                    body = f"Location: {loc.name or ''} {loc.address or ''} ({loc.latitude}, {loc.longitude})".strip(
+                    )
                 elif msg.type == "contacts" and msg.contacts:
                     c = msg.contacts[0]
                     name = c.name.formatted_name if c.name else "Unknown"
@@ -254,7 +255,8 @@ class MessageProcessorService:
                             campaign.replied_count += 1
 
                             if campaign_link.status == CampaignDeliveryStatus.READ:
-                                campaign.read_count = max(0, campaign.read_count - 1)
+                                campaign.read_count = max(
+                                    0, campaign.read_count - 1)
                             elif (
                                 campaign_link.status == CampaignDeliveryStatus.DELIVERED
                             ):
@@ -262,7 +264,8 @@ class MessageProcessorService:
                                     0, campaign.delivered_count - 1
                                 )
                             elif campaign_link.status == CampaignDeliveryStatus.SENT:
-                                campaign.sent_count = max(0, campaign.sent_count - 1)
+                                campaign.sent_count = max(
+                                    0, campaign.sent_count - 1)
 
                             self.uow.campaigns.add(campaign)
 
@@ -287,7 +290,8 @@ class MessageProcessorService:
                 await self.uow.session.flush()
 
                 contact.last_message_id = new_msg.id
-                contact.last_message_at = new_msg.created_at
+                contact.last_message_at = get_utc_now()
+                contact.last_incoming_message_at = get_utc_now()
                 self.uow.contacts.add(contact)
 
                 if msg.type in [
@@ -309,7 +313,8 @@ class MessageProcessorService:
                             or "application/octet-stream",
                             caption=media_meta.caption,
                         )
-                        logger.info(f"Queued media download for msg {new_msg.id}")
+                        logger.info(
+                            f"Queued media download for msg {new_msg.id}")
 
                 await self.uow.commit()
 
@@ -366,7 +371,8 @@ class MessageProcessorService:
                 if not m.wamid:
                     continue
                 try:
-                    m_suffix = base64.b64decode(m.wamid.replace("wamid.", ""))[-8:]
+                    m_suffix = base64.b64decode(
+                        m.wamid.replace("wamid.", ""))[-8:]
                     if m_suffix == target_suffix:
                         return m
                 except Exception:

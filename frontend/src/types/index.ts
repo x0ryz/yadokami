@@ -71,6 +71,7 @@ export interface Contact {
   updated_at: string;
   last_message_body?: string | null;
   last_message_status?: MessageStatus | null;
+  last_incoming_message_at: string | null;
   last_message_direction?: MessageDirection | null;
 }
 
