@@ -7,7 +7,7 @@ class WabaRepository(BaseRepository[WabaAccount]):
     def __init__(self, session):
         super().__init__(session, WabaAccount)
 
-    async def get_account(self) -> WabaAccount | None:
+    async def get_credentials(self) -> WabaAccount | None:
         stmt = select(WabaAccount).limit(1)
         result = await self.session.execute(stmt)
         return result.scalars().first()

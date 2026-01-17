@@ -2,8 +2,8 @@ from typing import AsyncGenerator
 
 import httpx
 from fastapi import Depends
+
 from src.clients.meta import MetaClient
-from src.core.config import settings
 from src.core.database import async_session_maker
 from src.core.uow import UnitOfWork
 from src.services.campaign.importer import ContactImportService

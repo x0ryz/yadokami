@@ -4,7 +4,6 @@ import json
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from loguru import logger
-from src.core.config import settings
 from src.core.dependencies import get_uow
 from src.core.exceptions import AuthError, BadRequestError
 from src.core.uow import UnitOfWork

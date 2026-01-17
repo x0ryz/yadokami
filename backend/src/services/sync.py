@@ -11,7 +11,7 @@ class SyncService:
 
     async def sync_account_data(self):
         async with self.uow:
-            waba_account = await self.uow.waba.get_account()
+            waba_account = await self.uow.waba.get_credentials()
             if not waba_account:
                 logger.warning("No WABA accounts found in the database.")
                 return

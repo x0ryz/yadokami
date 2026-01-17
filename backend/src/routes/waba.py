@@ -22,11 +22,11 @@ async def get_waba_settings(uow: UnitOfWork = Depends(get_uow)):
     Отримує поточні налаштування WABA (без чутливих даних).
     """
     async with uow:
-        account = await uow.waba.get_account()
+        account = await uow.waba.get_credentials()
         if not account:
             from fastapi import HTTPException
-            raise HTTPException(
-                status_code=404, detail="WABA account not found")
+
+            raise HTTPException(status_code=404, detail="WABA account not found")
         return account
 
 
@@ -39,7 +39,7 @@ async def update_waba_settings(
     Дані автоматично шифруються при збереженні в БД.
     """
     async with uow:
-        account = await uow.waba.get_account()
+        account = await uow.waba.get_credentials()
 
         if not account:
             account = WabaAccount(
@@ -76,8 +76,7 @@ async def trigger_waba_sync(request: Request):
     try:
         await handle_account_sync_task.kiq(sync_request)
     except Exception as e:
-        raise ServiceUnavailableError(
-            detail=f"Failed to enqueue sync task. Error: {e}")
+        raise ServiceUnavailableError(detail=f"Failed to enqueue sync task. Error: {e}")
 
     return {
         "status": "sync_started",
