@@ -23,16 +23,31 @@ def get_uow() -> UnitOfWork:
     return UnitOfWork(session_factory=async_session_maker)
 
 
-async def get_meta_client() -> AsyncGenerator[MetaClient, None]:
-    """Get Meta API client instance."""
+async def get_meta_client(
+    uow: UnitOfWork = Depends(get_uow),
+) -> AsyncGenerator[MetaClient, None]:
+    """Get Meta API client instance with dynamic credentials from DB."""
+
+    token = None
+    base_url = None
+
+    async with uow:
+        account = await uow.waba.get_credentials()
+        if account:
+            if account.access_token:
+                token = account.access_token
+
+            if hasattr(account, "graph_api_version") and account.graph_api_version:
+                base_url = f"https://graph.facebook.com/{account.graph_api_version}"
+
     async with httpx.AsyncClient(
         headers={
-            "Authorization": f"Bearer {settings.META_TOKEN}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         },
         timeout=30.0,
     ) as client:
-        yield MetaClient(client=client)
+        yield MetaClient(client=client, base_url=base_url)
 
 
 def get_storage_service() -> StorageService:
