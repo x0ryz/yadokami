@@ -6,14 +6,26 @@ from .base import TimestampMixin, UUIDMixin
 
 
 class WabaAccountRequest(BaseModel):
-    """Схема для створення або оновлення WABA акаунту"""
+    """Схема для налаштування WABA акаунту"""
 
     waba_id: str
-    name: str
+    name: str = "My Business"
+
+    access_token: str | None = None
+    app_secret: str | None = None
+    verify_token: str | None = None
+    graph_api_version: str = "v21.0"
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example": {"waba_id": "1234567890", "name": "My Business Name"}
+            "example": {
+                "waba_id": "1234567890",
+                "name": "My Business",
+                "access_token": "EAAG...",
+                "app_secret": "a1b2...",
+                "verify_token": "my_secret_verify_token",
+                "graph_api_version": "v21.0",
+            }
         }
     )
 

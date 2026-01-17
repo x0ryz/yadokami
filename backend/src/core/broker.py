@@ -1,7 +1,9 @@
 import httpx
 from src.core.config import settings
+from src.core.database import async_session_maker
 from src.core.logger import setup_logging
 from src.core.redis import close_redis, init_redis
+from src.core.uow import UnitOfWork
 from taskiq import TaskiqEvents, TaskiqScheduler, TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import (
@@ -34,11 +36,28 @@ scheduler = TaskiqScheduler(
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def startup(state: TaskiqState):
+    token = None
+
+    async with UnitOfWork(async_session_maker) as uow:
+        try:
+            account = await uow.waba.get_credentials()
+            if account and account.access_token:
+                token = account.access_token
+                logger.info("Taskiq Worker: Using Meta Token from Database.")
+            else:
+                logger.warning("Taskiq Worker: WABA Account or Token not found in DB.")
+        except Exception as e:
+            logger.error(f"Taskiq Worker: Failed to fetch token from DB. Error: {e}")
+
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    else:
+        logger.critical("Taskiq Worker: Starting WITHOUT Authorization token!")
+
     client = httpx.AsyncClient(
         timeout=10.0,
-        headers={
-            "Authorization": f"Bearer {settings.META_TOKEN}",
-        },
+        headers=headers,
     )
     state.http_client = client
 

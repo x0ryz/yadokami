@@ -36,20 +36,54 @@ async def get_http_client(context: Context = TaskiqDepends()) -> httpx.AsyncClie
     return context.state.http_client
 
 
+async def _get_meta_credentials() -> tuple[str | None, str]:
+    """
+    Допоміжна функція для отримання токена та базового URL з бази даних.
+    Повертає (token, base_url).
+    """
+    token = None
+    base_url = None
+
+    try:
+        async with UnitOfWork(async_session_maker) as uow:
+            account = await uow.waba.get_credentials()
+            if account:
+                if account.access_token:
+                    token = account.access_token
+
+                if hasattr(account, "graph_api_version") and account.graph_api_version:
+                    base_url = f"https://graph.facebook.com/{account.graph_api_version}"
+    except Exception as e:
+        logger.error(f"Failed to fetch WABA credentials: {e}")
+
+    return token, base_url
+
+
 @broker.task(
     task_name="handle_messages", retry_on_exception=True, max_retries=3, retry_delay=5
 )
-async def handle_messages_task(
-    message: WhatsAppMessage, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
-):
+async def handle_messages_task(message: WhatsAppMessage):
     async with limiter:
         with logger.contextualize(request_id=message.request_id):
-            uow = UnitOfWork(async_session_maker)
-            meta_client = MetaClient(client)
-            notifier = NotificationService()
-            sender_service = MessageSenderService(uow, meta_client, notifier)
+            token, base_url = await _get_meta_credentials()
 
-            await sender_service.send_manual_message(message)
+            if not token:
+                logger.error("Message sending aborted: No Access Token found in DB.")
+                return
+
+            async with httpx.AsyncClient(
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            ) as client:
+                uow = UnitOfWork(async_session_maker)
+                meta_client = MetaClient(client, base_url=base_url)
+                notifier = NotificationService()
+                sender_service = MessageSenderService(uow, meta_client, notifier)
+
+                await sender_service.send_manual_message(message)
 
 
 @broker.task(
@@ -65,38 +99,49 @@ async def handle_media_send_task(
     mime_type: str,
     caption: str | None = None,
     request_id: str | None = None,
-    client: httpx.AsyncClient = TaskiqDepends(get_http_client),
 ):
     async with limiter:
         with logger.contextualize(request_id=request_id or str(uuid.uuid4())):
             try:
-                uow = UnitOfWork(async_session_maker)
-                meta_client = MetaClient(client)
-                storage_service = StorageService()
-                notifier = NotificationService()
+                token, base_url = await _get_meta_credentials()
 
-                sender_service = MessageSenderService(
-                    uow, meta_client, notifier, storage_service
-                )
-
-                if not os.path.exists(file_path):
-                    logger.error(f"File not found at {file_path}")
+                if not token:
+                    logger.error("Media sending aborted: No Access Token found.")
                     return
 
-                async with aiofiles.open(file_path, "rb") as f:
-                    file_bytes = await f.read()
+                async with httpx.AsyncClient(
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                    },
+                    timeout=60.0,
+                ) as client:
+                    uow = UnitOfWork(async_session_maker)
+                    meta_client = MetaClient(client, base_url=base_url)
+                    storage_service = StorageService()
+                    notifier = NotificationService()
 
-                await sender_service.send_media_message(
-                    phone_number=phone_number,
-                    file_bytes=file_bytes,
-                    filename=filename,
-                    mime_type=mime_type,
-                    caption=caption,
-                )
+                    sender_service = MessageSenderService(
+                        uow, meta_client, notifier, storage_service
+                    )
 
-                logger.info(
-                    f"Media message sent successfully to {phone_number}. File: {filename}"
-                )
+                    if not os.path.exists(file_path):
+                        logger.error(f"File not found at {file_path}")
+                        return
+
+                    async with aiofiles.open(file_path, "rb") as f:
+                        file_bytes = await f.read()
+
+                    await sender_service.send_media_message(
+                        phone_number=phone_number,
+                        file_bytes=file_bytes,
+                        filename=filename,
+                        mime_type=mime_type,
+                        caption=caption,
+                    )
+
+                    logger.info(
+                        f"Media message sent successfully to {phone_number}. File: {filename}"
+                    )
             except Exception as e:
                 logger.error(f"Error sending media: {e}")
                 raise e
@@ -106,15 +151,26 @@ async def handle_media_send_task(
 
 
 @broker.task(task_name="sync_account_data")
-async def handle_account_sync_task(
-    message: WabaSyncRequest, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
-):
+async def handle_account_sync_task(message: WabaSyncRequest):
     with logger.contextualize(request_id=message.request_id):
-        uow = UnitOfWork(async_session_maker)
-        meta_client = MetaClient(client)
+        token, base_url = await _get_meta_credentials()
 
-        sync_service = SyncService(uow, meta_client)
-        await sync_service.sync_account_data()
+        if not token:
+            logger.error("Sync aborted: No Access Token found in DB.")
+            return
+
+        async with httpx.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            timeout=30.0,
+        ) as client:
+            uow = UnitOfWork(async_session_maker)
+            meta_client = MetaClient(client, base_url=base_url)
+
+            sync_service = SyncService(uow, meta_client)
+            await sync_service.sync_account_data()
 
 
 @broker.task(
@@ -126,59 +182,68 @@ async def handle_media_download_task(
     media_type: str,
     mime_type: str,
     caption: str | None = None,
-    client: httpx.AsyncClient = TaskiqDepends(get_http_client),
 ):
     with logger.contextualize(message_id=str(message_id), media_id=meta_media_id):
-        uow = UnitOfWork(async_session_maker)
-        meta_client = MetaClient(client)
-        storage_service = StorageService()
+        token, base_url = await _get_meta_credentials()
 
-        try:
-            media_url = await meta_client.get_media_url(meta_media_id)
+        if not token:
+            logger.error("Media download aborted: No Access Token found.")
+            return
 
-            ext = mimetypes.guess_extension(mime_type) or ".bin"
-            filename = f"{uuid.uuid4()}{ext}"
-            r2_key = f"whatsapp/{media_type}s/{filename}"
+        async with httpx.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+            timeout=60.0,
+        ) as client:
+            uow = UnitOfWork(async_session_maker)
+            meta_client = MetaClient(client, base_url=base_url)
+            storage_service = StorageService()
 
-            logger.info(f"Starting stream download for {media_type}: {r2_key}")
+            try:
+                media_url = await meta_client.get_media_url(meta_media_id)
 
-            async with client.stream("GET", media_url) as response:
-                response.raise_for_status()
-                file_size = int(response.headers.get("content-length", 0))
-                file_stream = AsyncIteratorFile(response.aiter_bytes())
+                ext = mimetypes.guess_extension(mime_type) or ".bin"
+                filename = f"{uuid.uuid4()}{ext}"
+                r2_key = f"whatsapp/{media_type}s/{filename}"
 
-                await storage_service.upload_stream(
-                    file_stream=file_stream,
-                    object_name=r2_key,
-                    content_type=mime_type,
-                )
+                logger.info(f"Starting stream download for {media_type}: {r2_key}")
 
-            async with uow:
-                await uow.messages.add_media_file(
-                    message_id=message_id,
-                    meta_media_id=meta_media_id,
-                    file_name=filename,
-                    file_mime_type=mime_type,
-                    file_size=file_size,
-                    caption=caption,
-                    r2_key=r2_key,
-                    bucket_name=settings.R2_BUCKET_NAME,
-                )
-                await uow.commit()
+                async with client.stream("GET", media_url) as response:
+                    response.raise_for_status()
+                    file_size = int(response.headers.get("content-length", 0))
+                    file_stream = AsyncIteratorFile(response.aiter_bytes())
 
-            logger.info(f"Media saved successfully: {r2_key}")
+                    await storage_service.upload_stream(
+                        file_stream=file_stream,
+                        object_name=r2_key,
+                        content_type=mime_type,
+                    )
 
-        except Exception as e:
-            logger.error(f"Failed to process media: {e}")
-            raise
+                async with uow:
+                    await uow.messages.add_media_file(
+                        message_id=message_id,
+                        meta_media_id=meta_media_id,
+                        file_name=filename,
+                        file_mime_type=mime_type,
+                        file_size=file_size,
+                        caption=caption,
+                        r2_key=r2_key,
+                        bucket_name=settings.R2_BUCKET_NAME,
+                    )
+                    await uow.commit()
+
+                logger.info(f"Media saved successfully: {r2_key}")
+
+            except Exception as e:
+                logger.error(f"Failed to process media: {e}")
+                raise
 
 
 @broker.task(
     task_name="raw_webhooks", retry_on_exception=True, max_retries=5, retry_delay=5
 )
-async def handle_raw_webhook_task(
-    event: WebhookEvent, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
-):
+async def handle_raw_webhook_task(event: WebhookEvent):
     data = event.payload
 
     async with async_session_maker() as session:
@@ -189,100 +254,132 @@ async def handle_raw_webhook_task(
         except Exception as e:
             logger.error(f"Failed to save webhook log: {e}")
 
-    uow = UnitOfWork(async_session_maker)
-    meta_client = MetaClient(client)
-    storage_service = StorageService()
-    notifier = NotificationService()
-    media_service = MediaService(uow, storage_service, meta_client)
+    token, base_url = await _get_meta_credentials()
 
-    processor_service = MessageProcessorService(uow, media_service, notifier)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
-    webhook_payload = MetaWebhookPayload(**event.payload)
-    await processor_service.process_webhook(webhook_payload)
+    async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
+        uow = UnitOfWork(async_session_maker)
+        meta_client = MetaClient(client, base_url=base_url)
+        storage_service = StorageService()
+        notifier = NotificationService()
+        media_service = MediaService(uow, storage_service, meta_client)
+
+        processor_service = MessageProcessorService(uow, media_service, notifier)
+
+        webhook_payload = MetaWebhookPayload(**event.payload)
+        await processor_service.process_webhook(webhook_payload)
 
 
 @broker.task(task_name="process_campaign_batch")
 async def process_campaign_batch_task(
     campaign_id: str,
     batch_number: int = 1,
-    client: httpx.AsyncClient = TaskiqDepends(get_http_client),
 ):
     BATCH_SIZE = 100
     PROGRESS_UPDATE_INTERVAL = 10
 
-    uow = UnitOfWork(async_session_maker)
-    meta_client = MetaClient(client)
-    notifier = NotificationService()
-    message_sender = MessageSenderService(uow, meta_client, notifier)
-    sender = CampaignSenderService(uow, message_sender, notifier)
-
-    async with uow:
-        contacts = await uow.campaign_contacts.get_sendable_contacts(
-            UUID(campaign_id), limit=BATCH_SIZE
-        )
-
-    if not contacts:
-        await sender._check_campaign_completion(UUID(campaign_id))
+    token, base_url = await _get_meta_credentials()
+    if not token:
+        logger.error(f"Campaign {campaign_id} batch processing aborted: No Token.")
         return
 
-    batch_size = len(contacts)
-    logger.info(f"Batch #{batch_number}: Processing {batch_size} contacts")
+    async with httpx.AsyncClient(
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        timeout=30.0,
+    ) as client:
+        uow = UnitOfWork(async_session_maker)
+        meta_client = MetaClient(client, base_url=base_url)
+        notifier = NotificationService()
+        message_sender = MessageSenderService(uow, meta_client, notifier)
+        sender = CampaignSenderService(uow, message_sender, notifier)
 
-    await sender.notify_batch_progress(
-        campaign_id=UUID(campaign_id),
-        batch_number=batch_number,
-        stats={"batch_size": batch_size, "processed": 0, "successful": 0, "failed": 0},
-    )
+        async with uow:
+            contacts = await uow.campaign_contacts.get_sendable_contacts(
+                UUID(campaign_id), limit=BATCH_SIZE
+            )
 
-    processed = 0
-    successful = 0
-    failed = 0
+        if not contacts:
+            await sender._check_campaign_completion(UUID(campaign_id))
+            return
 
-    for link in contacts:
-        async with limiter:
-            try:
-                await sender.send_single_message(
-                    campaign_id=UUID(campaign_id),
-                    link_id=link.id,
-                    contact_id=link.contact_id,
-                )
-                successful += 1
-            except Exception as e:
-                logger.error(f"Error sending in batch: {e}")
-                failed += 1
+        batch_size = len(contacts)
+        logger.info(f"Batch #{batch_number}: Processing {batch_size} contacts")
 
-            processed += 1
+        await sender.notify_batch_progress(
+            campaign_id=UUID(campaign_id),
+            batch_number=batch_number,
+            stats={
+                "batch_size": batch_size,
+                "processed": 0,
+                "successful": 0,
+                "failed": 0,
+            },
+        )
 
-            if processed % PROGRESS_UPDATE_INTERVAL == 0 or processed == batch_size:
-                await sender.notify_batch_progress(
-                    campaign_id=UUID(campaign_id),
-                    batch_number=batch_number,
-                    stats={
-                        "batch_size": batch_size,
-                        "processed": processed,
-                        "successful": successful,
-                        "failed": failed,
-                    },
-                )
+        processed = 0
+        successful = 0
+        failed = 0
 
-    logger.info(f"Batch #{batch_number} completed")
-    await process_campaign_batch_task.kiq(campaign_id, batch_number + 1)
+        for link in contacts:
+            async with limiter:
+                try:
+                    await sender.send_single_message(
+                        campaign_id=UUID(campaign_id),
+                        link_id=link.id,
+                        contact_id=link.contact_id,
+                    )
+                    successful += 1
+                except Exception as e:
+                    logger.error(f"Error sending in batch: {e}")
+                    failed += 1
+
+                processed += 1
+
+                if processed % PROGRESS_UPDATE_INTERVAL == 0 or processed == batch_size:
+                    await sender.notify_batch_progress(
+                        campaign_id=UUID(campaign_id),
+                        batch_number=batch_number,
+                        stats={
+                            "batch_size": batch_size,
+                            "processed": processed,
+                            "successful": successful,
+                            "failed": failed,
+                        },
+                    )
+
+        logger.info(f"Batch #{batch_number} completed")
+        await process_campaign_batch_task.kiq(campaign_id, batch_number + 1)
 
 
 @broker.task(task_name="campaign_start")
-async def handle_campaign_start_task(
-    campaign_id: str, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
-):
+async def handle_campaign_start_task(campaign_id: str):
     with logger.contextualize(campaign_id=campaign_id):
         try:
-            uow = UnitOfWork(async_session_maker)
-            meta_client = MetaClient(client)
-            notifier = NotificationService()
-            message_sender = MessageSenderService(uow, meta_client, notifier)
-            sender = CampaignSenderService(uow, message_sender, notifier)
+            token, base_url = await _get_meta_credentials()
+            if not token:
+                raise ValueError("No Access Token found in DB")
 
-            await sender.start_campaign(UUID(campaign_id))
-            await process_campaign_batch_task.kiq(campaign_id, batch_number=1)
+            async with httpx.AsyncClient(
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            ) as client:
+                uow = UnitOfWork(async_session_maker)
+                meta_client = MetaClient(client, base_url=base_url)
+                notifier = NotificationService()
+                message_sender = MessageSenderService(uow, meta_client, notifier)
+                sender = CampaignSenderService(uow, message_sender, notifier)
+
+                await sender.start_campaign(UUID(campaign_id))
+                await process_campaign_batch_task.kiq(campaign_id, batch_number=1)
 
         except Exception as e:
             logger.exception(f"Campaign {campaign_id} failed to start")
@@ -293,19 +390,28 @@ async def handle_campaign_start_task(
 
 
 @broker.task(task_name="campaign_resume")
-async def handle_campaign_resume_task(
-    campaign_id: str, client: httpx.AsyncClient = TaskiqDepends(get_http_client)
-):
+async def handle_campaign_resume_task(campaign_id: str):
     with logger.contextualize(campaign_id=campaign_id):
         try:
-            uow = UnitOfWork(async_session_maker)
-            meta_client = MetaClient(client)
-            notifier = NotificationService()
-            message_sender = MessageSenderService(uow, meta_client, notifier)
-            sender = CampaignSenderService(uow, message_sender, notifier)
+            token, base_url = await _get_meta_credentials()
+            if not token:
+                raise ValueError("No Access Token found in DB")
 
-            await sender.resume_campaign(UUID(campaign_id))
-            await process_campaign_batch_task.kiq(campaign_id)
+            async with httpx.AsyncClient(
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            ) as client:
+                uow = UnitOfWork(async_session_maker)
+                meta_client = MetaClient(client, base_url=base_url)
+                notifier = NotificationService()
+                message_sender = MessageSenderService(uow, meta_client, notifier)
+                sender = CampaignSenderService(uow, message_sender, notifier)
+
+                await sender.resume_campaign(UUID(campaign_id))
+                await process_campaign_batch_task.kiq(campaign_id)
 
         except Exception:
             logger.exception(f"Campaign {campaign_id} resume failed")

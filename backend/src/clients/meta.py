@@ -1,5 +1,4 @@
 import httpx
-from src.core.config import settings
 from tenacity import (
     retry,
     retry_if_exception,
@@ -21,9 +20,9 @@ def is_transient_error(exception):
 
 
 class MetaClient:
-    def __init__(self, client: httpx.AsyncClient):
+    def __init__(self, client: httpx.AsyncClient, base_url: str = None):
         self.client = client
-        self.base_url = settings.META_URL
+        self.base_url = base_url
 
     @retry(
         stop=stop_after_attempt(3),
@@ -54,25 +53,10 @@ class MetaClient:
     async def upload_media(
         self, phone_id: str, file_bytes: bytes, mime_type: str, filename: str
     ) -> str:
-        """
-        Upload media file to WhatsApp Business API.
-
-        Args:
-            phone_id: WhatsApp Business phone number ID
-            file_bytes: Binary file content
-            mime_type: MIME type of the file (e.g., 'image/jpeg')
-            filename: Original filename
-
-        Returns:
-            str: Media ID from Meta
-
-        Raises:
-            httpx.HTTPStatusError: If upload fails
-        """
+        """Upload media file to WhatsApp Business API."""
         url = f"{self.base_url}/{phone_id}/media"
 
         files = {"file": (filename, file_bytes, mime_type)}
-
         data = {"messaging_product": "whatsapp"}
 
         resp = await self.client.post(url, files=files, data=data)
