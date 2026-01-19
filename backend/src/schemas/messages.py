@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
 from src.models.base import MessageDirection, MessageStatus
 
 from .base import UUIDMixin
@@ -16,6 +17,7 @@ class MessageCreate(BaseModel):
     body: str = Field(..., description="Message text or template ID")
     template_id: UUID | None = None
     reply_to_message_id: UUID | None = None
+    phone_id: UUID | None = None
 
 
 class WhatsAppMessage(BaseModel):
@@ -25,6 +27,7 @@ class WhatsAppMessage(BaseModel):
     type: Literal["text", "template", "image", "video", "audio", "document", "sticker"]
     body: str
     reply_to_message_id: UUID | None = None
+    phone_id: UUID | None = None
     request_id: str = Field(default_factory=lambda: str(uuid4()))
 
     model_config = ConfigDict(

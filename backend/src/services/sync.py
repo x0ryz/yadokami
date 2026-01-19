@@ -24,17 +24,20 @@ class SyncService:
                 await self._sync_templates(waba_account)
 
                 await self.uow.commit()
-                logger.success(f"Synced account '{waba_account.name}' successfully")
+                logger.success(
+                    f"Synced account '{waba_account.name}' successfully")
 
             except Exception:
-                logger.exception(f"Failed to sync WABA ID {waba_account.waba_id}")
+                logger.exception(
+                    f"Failed to sync WABA ID {waba_account.waba_id}")
                 raise
 
     async def _sync_account_info(self, waba_account: WabaAccount):
         account_info = await self.meta_client.fetch_account_info(waba_account.waba_id)
 
         waba_account.name = str(account_info.get("name", ""))
-        waba_account.account_review_status = account_info.get("account_review_status")
+        waba_account.account_review_status = account_info.get(
+            "account_review_status")
         waba_account.business_verification_status = account_info.get(
             "business_verification_status"
         )
@@ -55,7 +58,7 @@ class SyncService:
         if not phone_id:
             return
 
-        phone_obj = await self.uow.waba.get_by_phone_id(phone_id)
+        phone_obj = await self.uow.waba_phones.get_by_phone_id(phone_id)
 
         if not phone_obj:
             phone_obj = WabaPhoneNumber(
@@ -68,7 +71,8 @@ class SyncService:
             )
         else:
             phone_obj.status = item.get("code_verification_status")
-            phone_obj.quality_rating = str(item.get("quality_rating", "UNKNOWN"))
+            phone_obj.quality_rating = str(
+                item.get("quality_rating", "UNKNOWN"))
             phone_obj.messaging_limit_tier = item.get("messaging_limit_tier")
             phone_obj.updated_at = get_utc_now()
 

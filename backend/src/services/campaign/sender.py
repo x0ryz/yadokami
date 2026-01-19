@@ -1,12 +1,12 @@
 from uuid import UUID
 
 from loguru import logger
+
 from src.core.uow import UnitOfWork
 from src.models import (
     Campaign,
     CampaignDeliveryStatus,
     CampaignStatus,
-    ContactStatus,
     get_utc_now,
 )
 from src.services.campaign.tracker import CampaignProgressTracker
@@ -175,6 +175,9 @@ class CampaignSenderService:
                 template_id=campaign.template_id,
                 template_name=template_name,
                 is_campaign=True,
+                phone_id=str(campaign.waba_phone_id)
+                if campaign.waba_phone_id
+                else None,
             )
 
             now = get_utc_now()

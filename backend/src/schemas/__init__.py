@@ -43,6 +43,7 @@ from .templates import TemplateListResponse, TemplateResponse
 from .waba import (
     WabaAccountRequest,
     WabaAccountResponse,
+    WabaPhoneNumbersResponse,
     WabaPhoneResponse,
     WabaSyncRequest,
     WabaSyncResponse,
@@ -100,6 +101,7 @@ __all__ = [
     "WabaAccountRequest",
     "WabaAccountResponse",
     "WabaPhoneResponse",
+    "WabaPhoneNumbersResponse",
     "WabaSyncRequest",
     "WabaSyncResponse",
     # Webhooks

@@ -141,7 +141,7 @@ class MessageProcessorService:
 
         waba_phone_db_id = None
         async with self.uow:
-            waba_phone = await self.uow.waba.get_by_phone_id(phone_number_id)
+            waba_phone = await self.uow.waba_phones.get_by_phone_id(phone_number_id)
             if waba_phone:
                 waba_phone_db_id = waba_phone.id
 
@@ -422,7 +422,7 @@ class MessageProcessorService:
         )
 
         async with self.uow:
-            phone = await self.uow.waba.get_by_display_phone(
+            phone = await self.uow.waba_phones.get_by_display_phone(
                 update.display_phone_number
             )
             if phone:

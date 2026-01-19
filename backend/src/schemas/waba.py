@@ -45,6 +45,7 @@ class WabaAccountResponse(UUIDMixin):
     name: str
     account_review_status: str | None = None
     business_verification_status: str | None = None
+    graph_api_version: str | None = "v21.0"
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -86,6 +87,31 @@ class WabaPhoneResponse(UUIDMixin, TimestampMixin):
             }
         },
     )
+
+
+class WabaPhoneNumberResponse(BaseModel):
+    """WABA phone number information"""
+
+    id: UUID
+    display_phone_number: str
+    quality_rating: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "display_phone_number": "+380671234567",
+                "quality_rating": "GREEN",
+            }
+        },
+    )
+
+
+class WabaPhoneNumbersResponse(BaseModel):
+    """List of WABA phone numbers"""
+
+    phone_numbers: list[WabaPhoneNumberResponse]
 
 
 class WabaSyncResponse(BaseModel):

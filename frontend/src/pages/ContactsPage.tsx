@@ -34,6 +34,8 @@ const ContactsPage: React.FC = () => {
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [hasMoreContacts, setHasMoreContacts] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // --- Initial Load ---
   useEffect(() => {
@@ -280,10 +282,39 @@ const ContactsPage: React.FC = () => {
         status,
       );
       setContacts(Array.isArray(data) ? data : []);
+      setHasMoreContacts(Array.isArray(data) && data.length >= 50);
     } catch (error: any) {
       console.error("Помилка завантаження контактів:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (loading || loadingMore || !hasMoreContacts) return;
+
+    try {
+      setLoadingMore(true);
+      const currentLength = contacts.length;
+      const status = showArchived ? ContactStatus.ARCHIVED : undefined;
+
+      const newContacts = await apiClient.getContacts(
+        50,
+        currentLength,
+        selectedFilterTags,
+        status
+      );
+
+      if (Array.isArray(newContacts) && newContacts.length > 0) {
+        setContacts((prev) => [...prev, ...newContacts]);
+        setHasMoreContacts(newContacts.length >= 50);
+      } else {
+        setHasMoreContacts(false);
+      }
+    } catch (error) {
+      console.error("Помилка дозавантаження контактів:", error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -528,11 +559,10 @@ const ContactsPage: React.FC = () => {
           {/* Archive Toggle Button */}
           <button
             onClick={() => setShowArchived(!showArchived)}
-            className={`p-2 rounded-lg border transition-colors ${
-              showArchived
+            className={`p-2 rounded-lg border transition-colors ${showArchived
                 ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
                 : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
-            }`}
+              }`}
             title={
               showArchived
                 ? "Показати активні контакти"
@@ -581,6 +611,9 @@ const ContactsPage: React.FC = () => {
               contacts={contacts}
               selectedContact={selectedContact}
               onSelectContact={handleSelectContact}
+              onLoadMore={handleLoadMore}
+              hasMore={hasMoreContacts}
+              loading={loadingMore}
             />
           )}
         </div>

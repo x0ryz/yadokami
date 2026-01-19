@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Request
+
 from src.core.dependencies import get_uow
 from src.core.exceptions import ServiceUnavailableError
 from src.core.uow import UnitOfWork
@@ -8,6 +9,7 @@ from src.models import WabaAccount
 from src.schemas import (
     WabaAccountRequest,
     WabaAccountResponse,
+    WabaPhoneNumbersResponse,
     WabaSyncRequest,
     WabaSyncResponse,
 )
@@ -83,3 +85,11 @@ async def trigger_waba_sync(request: Request):
         "request_id": request_id,
         "message": "WABA sync initiated",
     }
+
+
+@router.get("/waba/phone-numbers", response_model=WabaPhoneNumbersResponse)
+async def get_waba_phone_numbers(uow: UnitOfWork = Depends(get_uow)):
+    """Get a list of available phone numbers."""
+    async with uow:
+        phone_numbers = await uow.waba_phones.get_all_phones()
+        return {"phone_numbers": phone_numbers}

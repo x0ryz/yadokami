@@ -38,19 +38,23 @@ class MediaFile(Base, UUIDMixin):
         DateTime(timezone=True), default=get_utc_now
     )
 
-    message: Mapped["Message | None"] = relationship(back_populates="media_files")
+    message: Mapped["Message | None"] = relationship(
+        back_populates="media_files")
 
 
 class Message(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "messages"
 
-    wamid: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    wamid: Mapped[str | None] = mapped_column(
+        String, index=True, nullable=True)
 
-    waba_phone_id: Mapped[UUID] = mapped_column(ForeignKey("waba_phone_numbers.id"))
+    waba_phone_id: Mapped[UUID] = mapped_column(
+        ForeignKey("waba_phone_numbers.id"))
     contact_id: Mapped[UUID] = mapped_column(ForeignKey("contacts.id"))
 
     direction: Mapped[MessageDirection]
-    status: Mapped[MessageStatus] = mapped_column(default=MessageStatus.PENDING)
+    status: Mapped[MessageStatus] = mapped_column(
+        default=MessageStatus.PENDING)
 
     message_type: Mapped[str] = mapped_column(String, default="text")
     body: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -64,7 +68,8 @@ class Message(Base, UUIDMixin, TimestampMixin):
         ForeignKey("templates.id"), nullable=True
     )
 
-    media_files: Mapped[list["MediaFile"]] = relationship(back_populates="message")
+    media_files: Mapped[list["MediaFile"]] = relationship(
+        back_populates="message")
 
     contact: Mapped["Contact | None"] = relationship(
         back_populates="messages", foreign_keys=[contact_id]
@@ -73,4 +78,5 @@ class Message(Base, UUIDMixin, TimestampMixin):
         back_populates="messages"
     )
 
-    parent_message: Mapped["Message | None"] = relationship(remote_side="Message.id")
+    parent_message: Mapped["Message | None"] = relationship(
+        remote_side="Message.id")

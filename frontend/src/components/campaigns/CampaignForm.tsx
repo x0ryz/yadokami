@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { CampaignCreate, CampaignUpdate, MessageType } from '../../types';
-import { apiClient } from '../../api';
-import { Template } from '../../types';
+import React, { useState, useEffect } from "react";
+import {
+  CampaignCreate,
+  CampaignUpdate,
+  MessageType,
+  WabaPhoneNumberResponse,
+} from "../../types";
+import { apiClient } from "../../api";
+import { Template } from "../../types";
 
 interface CampaignFormProps {
   initialData?: CampaignCreate | CampaignUpdate;
@@ -10,15 +15,32 @@ interface CampaignFormProps {
   isEdit?: boolean;
 }
 
-const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, onSubmit, onCancel, isEdit = false }) => {
-  const [name, setName] = useState(initialData?.name || '');
+const CampaignForm: React.FC<CampaignFormProps> = ({
+  initialData,
+  onSubmit,
+  onCancel,
+  isEdit = false,
+}) => {
+  const [name, setName] = useState(initialData?.name || "");
   const [messageType, setMessageType] = useState<MessageType>(
-    (initialData?.message_type as MessageType) || MessageType.TEMPLATE
+    (initialData?.message_type as MessageType) || MessageType.TEMPLATE,
   );
-  const [templateId, setTemplateId] = useState(initialData?.template_id || '');
-  const [messageBody, setMessageBody] = useState(initialData?.message_body || '');
+  const [templateId, setTemplateId] = useState(initialData?.template_id || "");
+  const [wabaPhoneId, setWabaPhoneId] = useState(
+    (initialData && "waba_phone_id" in initialData && initialData.waba_phone_id) ||
+      "",
+  );
+  const [messageBody, setMessageBody] = useState(
+    initialData?.message_body || "",
+  );
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [wabaPhones, setWabaPhones] = useState<WabaPhoneNumberResponse[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [loadingPhones, setLoadingPhones] = useState(false);
+
+  useEffect(() => {
+    loadWabaPhones();
+  }, []);
 
   useEffect(() => {
     if (messageType === MessageType.TEMPLATE) {
@@ -32,9 +54,21 @@ const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, onSubmit, onCa
       const data = await apiClient.listTemplates();
       setTemplates(data);
     } catch (error) {
-      console.error('Помилка завантаження шаблонів:', error);
+      console.error("Помилка завантаження шаблонів:", error);
     } finally {
       setLoadingTemplates(false);
+    }
+  };
+
+  const loadWabaPhones = async () => {
+    try {
+      setLoadingPhones(true);
+      const data = await apiClient.getWabaPhoneNumbers();
+      setWabaPhones(data.phone_numbers);
+    } catch (error) {
+      console.error("Помилка завантаження номерів WABA:", error);
+    } finally {
+      setLoadingPhones(false);
     }
   };
 
@@ -44,16 +78,21 @@ const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, onSubmit, onCa
       const data: CampaignUpdate = {
         name: name || null,
         message_type: messageType,
-        template_id: messageType === MessageType.TEMPLATE ? templateId || null : null,
-        message_body: messageType === MessageType.TEXT ? messageBody || null : null,
+        template_id:
+          messageType === MessageType.TEMPLATE ? templateId || null : null,
+        message_body:
+          messageType === MessageType.TEXT ? messageBody || null : null,
       };
       await onSubmit(data);
     } else {
       const data: CampaignCreate = {
         name: name,
         message_type: messageType,
-        template_id: messageType === MessageType.TEMPLATE ? templateId || null : null,
-        message_body: messageType === MessageType.TEXT ? messageBody || null : null,
+        template_id:
+          messageType === MessageType.TEMPLATE ? templateId || null : null,
+        waba_phone_id: wabaPhoneId || null,
+        message_body:
+          messageType === MessageType.TEXT ? messageBody || null : null,
       };
       await onSubmit(data);
     }
@@ -72,6 +111,29 @@ const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, onSubmit, onCa
           required
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Номер WABA
+        </label>
+        {loadingPhones ? (
+          <div className="text-sm text-gray-500">Завантаження номерів...</div>
+        ) : (
+          <select
+            value={wabaPhoneId}
+            onChange={(e) => setWabaPhoneId(e.target.value)}
+            disabled={isEdit}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Оберіть номер</option>
+            {wabaPhones.map((phone) => (
+              <option key={phone.id} value={phone.id}>
+                {phone.display_phone_number} ({phone.quality_rating})
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div>
@@ -104,7 +166,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({ initialData, onSubmit, onCa
             >
               <option value="">Оберіть шаблон</option>
               {templates
-                .filter((t) => t.status.toLowerCase().includes('approved'))
+                .filter((t) => t.status.toLowerCase().includes("approved"))
                 .map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name} ({template.language})

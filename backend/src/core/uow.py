@@ -6,7 +6,7 @@ from src.repositories.contact import ContactRepository
 from src.repositories.message import MessageRepository
 from src.repositories.tag import TagRepository
 from src.repositories.template import TemplateRepository
-from src.repositories.waba import WabaRepository
+from src.repositories.waba import WabaPhoneRepository, WabaRepository
 
 
 class UnitOfWork:
@@ -20,6 +20,7 @@ class UnitOfWork:
         self.messages = MessageRepository(self.session)
         self.contacts = ContactRepository(self.session)
         self.waba = WabaRepository(self.session)
+        self.waba_phones = WabaPhoneRepository(self.session)
         self.templates = TemplateRepository(self.session)
         self.campaigns = CampaignRepository(self.session)
         self.campaign_contacts = CampaignContactRepository(self.session)

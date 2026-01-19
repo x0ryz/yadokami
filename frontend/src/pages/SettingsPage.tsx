@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { WabaAccountStatus } from "../types";
+import { WabaSettingsResponse } from "../types";
 import { AlertCircle, Loader, Save, Check, RefreshCw } from "lucide-react";
 
 interface WabaSettings {
@@ -13,7 +13,7 @@ interface WabaSettings {
 }
 
 const SettingsPage: React.FC = () => {
-  const [account, setAccount] = useState<WabaAccountStatus | null>(null);
+  const [account, setAccount] = useState<WabaSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -44,7 +44,7 @@ const SettingsPage: React.FC = () => {
       const settings = await apiClient.getWabaSettings();
       
       if (settings) {
-        setAccount(settings as any);
+        setAccount(settings);
         setFormData({
           waba_id: settings.waba_id || "",
           name: settings.name || "My Business",
@@ -133,7 +133,7 @@ const SettingsPage: React.FC = () => {
 
       const response = await apiClient.updateWabaSettings(payload);
 
-      setAccount(response as any);
+      setAccount(response);
       setSuccess(true);
       
       // Clear sensitive fields after saving

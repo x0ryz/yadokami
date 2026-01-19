@@ -140,17 +140,17 @@ const SessionTimer: React.FC<{ lastIncomingAt: string | null | undefined }> = ({
             // При наведенні: показуємо HH:MM (напр. 23:15)
             `${timeLeft.hours}:${timeLeft.minutes.toString().padStart(2, "0")}`
           ) : // Звичайний стан: показуємо години або хвилини
-          timeLeft.hours > 0 ? (
-            <>
-              {timeLeft.hours}
-              <span className="text-[9px] font-normal">г</span>
-            </>
-          ) : (
-            <>
-              {timeLeft.minutes}
-              <span className="text-[9px] font-normal">хв</span>
-            </>
-          )}
+            timeLeft.hours > 0 ? (
+              <>
+                {timeLeft.hours}
+                <span className="text-[9px] font-normal">г</span>
+              </>
+            ) : (
+              <>
+                {timeLeft.minutes}
+                <span className="text-[9px] font-normal">хв</span>
+              </>
+            )}
         </span>
       </div>
     </div>
@@ -414,10 +414,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               >
                 <div
                   className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-lg shadow-sm text-sm leading-relaxed
-                    ${
-                      isOutbound
-                        ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
-                        : "bg-white text-gray-900 rounded-tl-none"
+                    ${isOutbound
+                      ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
+                      : "bg-white text-gray-900 rounded-tl-none"
                     }`}
                 >
                   {repliedMessage && (
@@ -454,26 +453,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             key={media.id}
                             className="rounded overflow-hidden"
                           >
-                            {media.file_mime_type.startsWith("image/") ? (
-                              <img
-                                src={media.url}
-                                alt="media"
-                                className="max-w-full h-auto rounded-lg"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <a
-                                href={media.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
-                              >
-                                <Paperclip className="w-5 h-5 text-gray-600" />
-                                <span className="underline decoration-dotted">
-                                  {media.file_name}
-                                </span>
-                              </a>
-                            )}
+                            <a
+                              href={media.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
+                            >
+                              <Paperclip className="w-5 h-5 text-gray-600" />
+                              <span className="underline decoration-dotted">
+                                {media.file_name}
+                              </span>
+                            </a>
                           </div>
                         ))}
                       </div>

@@ -23,11 +23,11 @@ const CAMPAIGN_TABS: {
   label: string;
   status?: CampaignStatus;
 }[] = [
-  { key: "all", label: "Усі", status: undefined },
-  { key: "drafts", label: "Чернетки", status: CampaignStatus.DRAFT },
-  { key: "scheduled", label: "Заплановані", status: CampaignStatus.SCHEDULED },
-  { key: "completed", label: "Завершені", status: CampaignStatus.COMPLETED },
-];
+    { key: "all", label: "Усі", status: undefined },
+    { key: "drafts", label: "Чернетки", status: CampaignStatus.DRAFT },
+    { key: "scheduled", label: "Заплановані", status: CampaignStatus.SCHEDULED },
+    { key: "completed", label: "Завершені", status: CampaignStatus.COMPLETED },
+  ];
 
 const CampaignsPage: React.FC = () => {
   const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
@@ -40,6 +40,9 @@ const CampaignsPage: React.FC = () => {
     CampaignContactResponse[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactsPage, setContactsPage] = useState(1);
+  const CONTACTS_PER_PAGE = 50;
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [activeTab, setActiveTab] = useState<CampaignTabKey>("drafts");
@@ -138,12 +141,12 @@ const CampaignsPage: React.FC = () => {
         setCampaignStats((prev) =>
           prev
             ? {
-                ...prev,
-                sent_count: data.sent,
-                delivered_count: data.delivered,
-                failed_count: data.failed,
-                progress_percent: data.progress_percent,
-              }
+              ...prev,
+              sent_count: data.sent,
+              delivered_count: data.delivered,
+              failed_count: data.failed,
+              progress_percent: data.progress_percent,
+            }
             : null,
         );
       }
@@ -161,14 +164,42 @@ const CampaignsPage: React.FC = () => {
 
   const loadCampaignDetails = async (campaignId: string) => {
     try {
-      const [stats, contacts] = await Promise.all([
-        apiClient.getCampaignStats(campaignId),
-        apiClient.getCampaignContacts(campaignId),
-      ]);
+      const stats = await apiClient.getCampaignStats(campaignId);
       setCampaignStats(stats);
+
+      // Load initial contacts
+      setContactsPage(1);
+      setLoadingContacts(true);
+      const contacts = await apiClient.getCampaignContacts(campaignId, {
+        limit: CONTACTS_PER_PAGE,
+        offset: 0
+      });
       setCampaignContacts(contacts);
     } catch (error) {
       console.error("Помилка завантаження деталей кампанії:", error);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  const handlePageChange = async (newPage: number) => {
+    if (!selectedCampaign || loadingContacts) return;
+
+    try {
+      setLoadingContacts(true);
+      setContactsPage(newPage);
+      const offset = (newPage - 1) * CONTACTS_PER_PAGE;
+
+      const newContacts = await apiClient.getCampaignContacts(selectedCampaign.id, {
+        limit: CONTACTS_PER_PAGE,
+        offset: offset,
+      });
+
+      setCampaignContacts(newContacts);
+    } catch (error) {
+      console.error("Помилка завантаження сторінки контактів:", error);
+    } finally {
+      setLoadingContacts(false);
     }
   };
 
@@ -356,6 +387,10 @@ const CampaignsPage: React.FC = () => {
             onImportContacts={handleImportContacts}
             showScheduleForm={showScheduleForm}
             onShowScheduleForm={setShowScheduleForm}
+            currentPage={contactsPage}
+            totalPages={Math.ceil((selectedCampaign?.total_contacts || 0) / CONTACTS_PER_PAGE)}
+            onPageChange={handlePageChange}
+            loadingContacts={loadingContacts}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">

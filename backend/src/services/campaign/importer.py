@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pandas as pd
 from loguru import logger
+
 from src.core.uow import UnitOfWork
 from src.models import CampaignContact, Contact, get_utc_now
 from src.schemas import ContactImport, ContactImportResult
@@ -181,6 +182,8 @@ class ContactImportService:
 
             except Exception as e:
                 logger.error(f"Save contact error: {e}")
+
+        await self.uow.session.flush()
 
         campaign.total_contacts = await self.uow.campaign_contacts.count_all(
             campaign_id

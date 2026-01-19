@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from loguru import logger
+
 from src.core.dependencies import get_contact_import_service, get_uow
 from src.core.exceptions import BadRequestError, NotFoundError, ServiceUnavailableError
 from src.core.uow import UnitOfWork
@@ -53,6 +54,7 @@ async def create_campaign(
             name=data.name,
             message_type=data.message_type,
             template_id=data.template_id,
+            waba_phone_id=data.waba_phone_id,
             message_body=data.message_body,
             status=CampaignStatus.DRAFT,
         )
@@ -149,9 +151,15 @@ async def schedule_campaign(
             )
 
         if campaign.total_contacts == 0:
-            raise BadRequestError(
-                detail="Cannot schedule campaign with no contacts",
-            )
+            # Fallback: Double check actual count in case of sync issues
+            actual_count = await uow.campaign_contacts.count_all(campaign_id)
+            if actual_count > 0:
+                campaign.total_contacts = actual_count
+                uow.session.add(campaign)
+            else:
+                raise BadRequestError(
+                    detail="Cannot schedule campaign with no contacts",
+                )
 
         now = get_utc_now()
         if data.scheduled_at <= now:
@@ -185,9 +193,15 @@ async def start_campaign_now(
             )
 
         if campaign.total_contacts == 0:
-            raise BadRequestError(
-                detail="Cannot start campaign with no contacts",
-            )
+            # Fallback: Double check actual count
+            actual_count = await uow.campaign_contacts.count_all(campaign_id)
+            if actual_count > 0:
+                campaign.total_contacts = actual_count
+                uow.session.add(campaign)
+            else:
+                raise BadRequestError(
+                    detail="Cannot start campaign with no contacts",
+                )
 
         try:
             await handle_campaign_start_task.kiq(str(campaign_id))

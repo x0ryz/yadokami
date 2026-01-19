@@ -29,6 +29,10 @@ interface CampaignDetailsProps {
   onImportContacts: (campaignId: string, file: File) => Promise<void>;
   showScheduleForm: boolean;
   onShowScheduleForm: (show: boolean) => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  loadingContacts?: boolean;
 }
 
 // КОНФІГУРАЦІЯ СТИЛІВ ДЛЯ СТАТИСТИКИ
@@ -131,16 +135,16 @@ const CampaignStatsBar: React.FC<{ stats: CampaignStats }> = ({ stats }) => {
 
       {/* 2. Legend Row with Split Layout */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 text-sm">
-        
+
         {/* Left Side: Specific Stats */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           {activeSegments.map((seg) => (
             <div key={seg.key} className="flex items-center gap-2">
               {/* Яскрава крапка */}
               <span className={`w-3 h-3 rounded-full ${seg.bg}`} />
-              
+
               <span className="text-gray-600">{seg.label}:</span>
-              
+
               {/* Кольоровий текст цифр */}
               <span className={`font-bold ${seg.text}`}>
                 {seg.value}{" "}
@@ -185,6 +189,10 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   onImportContacts,
   showScheduleForm,
   onShowScheduleForm,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
+  loadingContacts = false,
 }) => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showAddContacts, setShowAddContacts] = useState(false);
@@ -285,23 +293,21 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
         <div className="flex gap-4">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === "overview"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            }`}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "overview"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-600 hover:text-gray-900"
+              }`}
           >
             Огляд
           </button>
           <button
             onClick={() => setActiveTab("contacts")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === "contacts"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            }`}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "contacts"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-600 hover:text-gray-900"
+              }`}
           >
-            Контакти ({contacts.length})
+            Контакти ({campaign.total_contacts})
           </button>
         </div>
       </div>
@@ -432,6 +438,59 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                 </table>
               </div>
             )}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <button
+                  onClick={() => onPageChange?.(currentPage - 1)}
+                  disabled={currentPage === 1 || loadingContacts}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Назад
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page =>
+                    page === 1 ||
+                    page === totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  )
+                  .map((page, index, array) => (
+                    <React.Fragment key={page}>
+                      {index > 0 && array[index - 1] !== page - 1 && (
+                        <span className="text-gray-400">...</span>
+                      )}
+                      <button
+                        onClick={() => onPageChange?.(page)}
+                        disabled={loadingContacts}
+                        className={`px-3 py-1 text-sm rounded ${currentPage === page
+                          ? "bg-blue-600 text-white"
+                          : "border border-gray-300 hover:bg-gray-50"
+                          }`}
+                      >
+                        {page}
+                      </button>
+                    </React.Fragment>
+                  ))}
+
+                <button
+                  onClick={() => onPageChange?.(currentPage + 1)}
+                  disabled={currentPage === totalPages || loadingContacts}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Далі
+                </button>
+              </div>
+            )}
+
+            {/* Loading indicator overlay or small text */}
+            {loadingContacts && (
+              <div className="text-center text-xs text-gray-500 mt-2">
+                Завантаження...
+              </div>
+            )}
+
           </div>
         )}
       </div>
@@ -473,8 +532,14 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-xl font-bold mb-4">Додати контакти</h3>
             <ContactImportForm
-              onAddContacts={(contacts) => onAddContacts(campaign.id, contacts)}
-              onImportFile={(file) => onImportContacts(campaign.id, file)}
+              onAddContacts={async (contacts) => {
+                await onAddContacts(campaign.id, contacts);
+                setShowAddContacts(false);
+              }}
+              onImportFile={async (file) => {
+                await onImportContacts(campaign.id, file);
+                setShowAddContacts(false);
+              }}
               onCancel={() => setShowAddContacts(false)}
             />
           </div>

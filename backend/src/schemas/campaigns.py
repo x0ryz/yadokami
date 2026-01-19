@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import AliasPath, BaseModel, ConfigDict, Field, computed_field
+
 from src.models.base import CampaignDeliveryStatus, CampaignStatus
 
 from .base import TimestampMixin, UUIDMixin
@@ -14,6 +15,7 @@ class CampaignCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     message_type: Literal["text", "template"] = "template"
     template_id: UUID | None = None
+    waba_phone_id: UUID | None = None
     message_body: str | None = None
 
     model_config = ConfigDict(
@@ -55,6 +57,7 @@ class CampaignResponse(UUIDMixin, TimestampMixin):
     status: CampaignStatus
     message_type: str
     template_id: UUID | None = None
+    waba_phone_id: UUID | None = None
     message_body: str | None = None
     scheduled_at: datetime | None = None
     started_at: datetime | None = None

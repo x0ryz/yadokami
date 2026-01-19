@@ -81,7 +81,8 @@ class CampaignRepository(BaseRepository[Campaign]):
         return result.scalar() or 0
 
     async def get_recent(self, limit: int) -> list[Campaign]:
-        stmt = select(Campaign).order_by(desc(Campaign.updated_at)).limit(limit)
+        stmt = select(Campaign).order_by(
+            desc(Campaign.updated_at)).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -153,7 +154,8 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
         return result.scalar() is not None
 
     async def count_all(self, campaign_id: UUID) -> int:
-        stmt = select(func.count()).where(CampaignContact.campaign_id == campaign_id)
+        stmt = select(func.count()).where(
+            CampaignContact.campaign_id == campaign_id)
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 

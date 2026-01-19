@@ -2,6 +2,7 @@ import mimetypes
 import uuid
 
 from loguru import logger
+
 from src.clients.meta import MetaClient
 from src.core.config import settings
 from src.core.uow import UnitOfWork
@@ -59,6 +60,7 @@ class MessageSenderService:
                 template_name=template_name,
                 is_campaign=False,
                 reply_to_message_id=message.reply_to_message_id,
+                phone_id=str(message.phone_id) if message.phone_id else None
             )
 
     async def send_media_message(
@@ -68,6 +70,7 @@ class MessageSenderService:
         filename: str,
         mime_type: str,
         caption: str | None = None,
+        phone_id: str | None = None,
     ) -> Message:
         """
         Send a media message with file upload.
@@ -98,9 +101,12 @@ class MessageSenderService:
             contact = await self.uow.contacts.get_or_create(phone_number)
 
             # Step 2: Get WABA phone
-            waba_phone = await self.uow.waba.get_default_phone()
+            waba_phone = await self._get_preferred_phone(contact, phone_id)
             if not waba_phone:
-                raise ValueError("No WABA Phone numbers found in DB.")
+                # Fallback: get ANY phone if default isn't set? 
+                # Or just error out. User said they have multiple numbers.
+                # If we return None here, it errors.
+                raise ValueError("No eligible WABA Phone found (check phone_id or default phone config).")
 
             # Step 3: Upload to R2 (permanent storage)
             media_type = self._get_media_type(mime_type)
@@ -216,7 +222,17 @@ class MessageSenderService:
             )
             return
 
-        waba_phone = await self.uow.waba.get_default_phone()
+        if target_message.waba_phone_id:
+            waba_phone = await self.uow.waba_phones.get_by_id(
+                target_message.waba_phone_id
+            )
+        else:
+            waba_phone = None
+
+
+        if not waba_phone:
+            logger.error("Cannot react: No WABA phone found")
+            return
 
         payload = {
             "messaging_product": "whatsapp",
@@ -252,13 +268,19 @@ class MessageSenderService:
         template_name: str | None = None,
         is_campaign: bool = False,
         reply_to_message_id: uuid.UUID | None = None,
+        phone_id: str | None = None,
     ) -> Message:
         """
         Send message to a contact.
         IMPORTANT: This method does NOT commit.
         The caller must commit the transaction.
         """
-        waba_phone = await self.uow.waba.get_default_phone()
+        waba_phone = None
+        if phone_id:
+            waba_phone = await self.uow.waba_phones.get_by_id(uuid.UUID(phone_id))
+        else:
+            waba_phone = await self._get_preferred_phone(contact)
+
         if not waba_phone:
             raise ValueError("No WABA Phone numbers found in DB.")
 
@@ -365,7 +387,9 @@ class MessageSenderService:
         template_id: uuid.UUID | None,
         template_name: str | None,
         is_campaign: bool,
+
         reply_to_message_id: uuid.UUID | None = None,
+        phone_id: str | None = None,
     ):
         try:
             await self.send_to_contact(
@@ -376,6 +400,7 @@ class MessageSenderService:
                 template_name=template_name,
                 is_campaign=is_campaign,
                 reply_to_message_id=reply_to_message_id,
+                phone_id=phone_id,
             )
             await self.uow.commit()
         except Exception:
@@ -452,3 +477,31 @@ class MessageSenderService:
                 "language": {"code": "en_US"},
             }
         return payload
+
+    async def _get_preferred_phone(self, contact: Contact, phone_id: str | None = None):
+        """
+        Get the preferred phone number for a contact.
+        Strategies:
+        1. Use explicit phone_id if provided.
+        2. Use the phone number from the last message in the conversation.
+        3. Fallback to default phone number.
+        """
+        if phone_id:
+            try:
+                # Validate UUID format if string
+                p_uuid = uuid.UUID(str(phone_id))
+                phone = await self.uow.waba_phones.get_by_id(p_uuid)
+                if phone:
+                    return phone
+            except ValueError:
+                logger.warning(f"Invalid phone_id provided: {phone_id}")
+
+        if contact.last_message_id:
+            last_msg = await self.uow.messages.get_by_id(contact.last_message_id)
+            if last_msg and last_msg.waba_phone_id:
+                phone = await self.uow.waba_phones.get_by_id(last_msg.waba_phone_id)
+                if phone:
+                    return phone
+
+        return None
+

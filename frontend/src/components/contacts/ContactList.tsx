@@ -6,13 +6,37 @@ interface ContactListProps {
   contacts: Contact[];
   selectedContact: Contact | null;
   onSelectContact: (contact: Contact) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loading?: boolean;
 }
 
 const ContactList: React.FC<ContactListProps> = ({
   contacts,
   selectedContact,
   onSelectContact,
+  onLoadMore,
+  hasMore = false,
+  loading = false,
 }) => {
+  const observerTarget = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && onLoadMore) {
+          onLoadMore();
+        }
+      },
+      { threshold: 1.0 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, loading, onLoadMore]);
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -89,9 +113,8 @@ const ContactList: React.FC<ContactListProps> = ({
           <div
             key={contact.id}
             onClick={() => onSelectContact(contact)}
-            className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-all ${
-              isSelected ? "bg-blue-50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"
-            }`}
+            className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-all ${isSelected ? "bg-blue-50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"
+              }`}
           >
             <div className="flex justify-between items-baseline mb-1">
               <h3
@@ -151,6 +174,24 @@ const ContactList: React.FC<ContactListProps> = ({
           </div>
         );
       })}
+
+
+      {/* Loading indicator for infinite scroll */}
+      {(hasMore || loading) && (
+        <div
+          ref={observerTarget}
+          className="p-4 text-center text-gray-500 text-sm flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <span>Завантаження...</span>
+            </>
+          ) : (
+            <span className="opacity-0">Load more</span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

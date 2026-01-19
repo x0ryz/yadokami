@@ -120,7 +120,7 @@ class DashboardService:
     async def get_waba_status(self) -> dict:
         async with self.uow:
             accounts = await self.uow.waba.get_all_accounts()
-            phones = await self.uow.waba.get_all_phones()
+            phones = await self.uow.waba_phones.get_all_phones()
 
             return {
                 "accounts": [

@@ -128,6 +128,7 @@ export interface CampaignCreate {
   name: string;
   message_type?: MessageType;
   template_id?: string | null;
+  waba_phone_id?: string | null;
   message_body?: string | null;
 }
 
@@ -321,4 +322,23 @@ export interface WabaPhoneStatus {
 export interface WabaStatusResponse {
   accounts: WabaAccountStatus[];
   phone_numbers: WabaPhoneStatus[];
+}
+
+export interface WabaPhoneNumberResponse {
+  id: string;
+  display_phone_number: string;
+  quality_rating: string;
+}
+
+export interface WabaPhoneNumbersResponse {
+  phone_numbers: WabaPhoneNumberResponse[];
+}
+
+export interface WabaSettingsResponse {
+  id: string;
+  waba_id: string;
+  name: string;
+  account_review_status: string | null;
+  business_verification_status: string | null;
+  graph_api_version: string | null;
 }
