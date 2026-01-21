@@ -1,7 +1,9 @@
-from src.core.uow import UnitOfWork
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.models import MessageStatus
+from src.repositories.message import MessageRepository
 from src.schemas import MetaStatus
-from src.services.campaign.stats import CampaignStatsService
+from src.services.campaign.tracker import CampaignTrackerService
 from src.services.notifications.service import NotificationService
 
 
@@ -10,13 +12,15 @@ class StatusHandler:
 
     def __init__(
         self,
-        uow: UnitOfWork,
+        session: AsyncSession,
         notifier: NotificationService,
-        campaign_stats: CampaignStatsService,
+        campaign_tracker: CampaignTrackerService,
     ):
-        self.uow = uow
+        self.session = session
         self.notifier = notifier
-        self.campaign_stats = campaign_stats
+        self.campaign_tracker = campaign_tracker
+
+        self.messages = MessageRepository(session)
 
     async def handle(self, statuses: list[MetaStatus]):
         """Process status updates for messages."""
@@ -29,39 +33,37 @@ class StatusHandler:
 
         notifications_to_send = []
 
-        async with self.uow:
-            for status in statuses:
-                new_status = status_map.get(status.status)
-                if not new_status:
-                    continue
+        for status in statuses:
+            new_status = status_map.get(status.status)
+            if not new_status:
+                continue
 
-                db_message = await self.uow.messages.get_by_wamid(status.id)
-                if not db_message:
-                    continue
+            db_message = await self.messages.get_by_wamid(status.id)
+            if not db_message:
+                continue
 
-                if self._is_newer_status(db_message.status, new_status):
-                    db_message.status = new_status
-                    self.uow.messages.add(db_message)
+            if self._is_newer_status(db_message.status, new_status):
+                db_message.status = new_status
+                self.messages.add(db_message)
 
-                    # Update campaign statistics (decoupled via service)
-                    await self.campaign_stats.update_on_status_change(
-                        db_message.id, new_status
-                    )
+                await self.campaign_tracker.update_on_status_change(
+                    db_message.id, new_status
+                )
 
-                    # Prepare notification data (don't send yet)
-                    notifications_to_send.append(
-                        {
-                            "message_id": db_message.id,
-                            "wamid": status.id,
-                            "status": status.status,
-                            "phone": db_message.contact.phone_number
-                            if db_message.contact
-                            else None,
-                        }
-                    )
+                # Prepare notification data
+                notifications_to_send.append(
+                    {
+                        "message_id": db_message.id,
+                        "wamid": status.id,
+                        "status": status.status,
+                        "phone": db_message.contact.phone_number
+                        if db_message.contact
+                        else None,
+                    }
+                )
 
-            # Commit transaction first
-            await self.uow.commit()
+        # Commit transaction explicitly
+        await self.session.commit()
 
         # Send notifications after commit
         for note in notifications_to_send:

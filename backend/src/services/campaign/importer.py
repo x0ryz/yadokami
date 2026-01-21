@@ -4,15 +4,20 @@ from uuid import UUID
 
 import pandas as pd
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.uow import UnitOfWork
 from src.models import CampaignContact, Contact, get_utc_now
+from src.repositories.campaign import CampaignContactRepository, CampaignRepository
+from src.repositories.contact import ContactRepository
 from src.schemas import ContactImport, ContactImportResult
 
 
 class ContactImportService:
-    def __init__(self, uow: UnitOfWork):
-        self.uow = uow
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.campaigns = CampaignRepository(session)
+        self.contacts = ContactRepository(session)
+        self.campaign_contacts = CampaignContactRepository(session)
 
     def _normalize_phone(self, phone: any) -> str | None:
         if pd.isna(phone) or phone == "":
@@ -91,7 +96,6 @@ class ContactImportService:
 
             unique_contacts = {c["phone"]: c for c in contacts_data}.values()
 
-            # Збереження
             result.imported = await self._save_contacts_batch(
                 campaign_id, list(unique_contacts)
             )
@@ -136,11 +140,15 @@ class ContactImportService:
         self, campaign_id: UUID, contacts_data: list[dict]
     ) -> int:
         imported_count = 0
-        campaign = await self.uow.campaigns.get_by_id(campaign_id)
+        campaign = await self.campaigns.get_by_id(campaign_id)
+
+        if not campaign:
+            logger.error(f"Campaign {campaign_id} not found during import")
+            return 0
 
         for data in contacts_data:
             try:
-                contact = await self.uow.contacts.get_by_phone(data["phone"])
+                contact = await self.contacts.get_by_phone(data["phone"])
 
                 if not contact:
                     contact = Contact(
@@ -151,8 +159,8 @@ class ContactImportService:
                         created_at=get_utc_now(),
                         updated_at=get_utc_now(),
                     )
-                    self.uow.session.add(contact)
-                    await self.uow.session.flush()
+                    self.session.add(contact)
+                    await self.session.flush()
                 else:
                     updated = False
                     if data["name"] and not contact.name:
@@ -164,9 +172,9 @@ class ContactImportService:
 
                     if updated:
                         contact.updated_at = get_utc_now()
-                        self.uow.session.add(contact)
+                        self.session.add(contact)
 
-                exists = await self.uow.campaign_contacts.exists_for_contact(
+                exists = await self.campaign_contacts.exists_for_contact(
                     campaign_id, contact.id
                 )
 
@@ -177,19 +185,17 @@ class ContactImportService:
                         created_at=get_utc_now(),
                         updated_at=get_utc_now(),
                     )
-                    self.uow.session.add(link)
+                    self.session.add(link)
                     imported_count += 1
 
             except Exception as e:
                 logger.error(f"Save contact error: {e}")
 
-        await self.uow.session.flush()
+        await self.session.flush()
 
-        campaign.total_contacts = await self.uow.campaign_contacts.count_all(
-            campaign_id
-        )
+        campaign.total_contacts = await self.campaign_contacts.count_all(campaign_id)
         campaign.updated_at = get_utc_now()
-        self.uow.session.add(campaign)
+        self.session.add(campaign)
 
-        await self.uow.session.commit()
+        await self.session.commit()
         return imported_count

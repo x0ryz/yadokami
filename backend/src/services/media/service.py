@@ -2,26 +2,30 @@ import mimetypes
 import uuid
 
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.clients.meta import MetaClient
 from src.core.config import settings
-from src.core.uow import UnitOfWork
+from src.repositories.message import MessageRepository
 from src.schemas import MetaMedia, MetaMessage
 from src.services.media.storage import StorageService
 
 
 class MediaService:
     def __init__(
-        self, uow: UnitOfWork, storage_service: StorageService, meta_client: MetaClient
+        self, session: AsyncSession, storage_service: StorageService, meta_client: MetaClient
     ):
-        self.uow = uow
+        self.session = session
         self.storage = storage_service
         self.meta_client = meta_client
+        self.messages = MessageRepository(session)
 
     async def handle_media_attachment(
         self, message_id: uuid.UUID, meta_msg: MetaMessage
     ):
         try:
-            media_obj: MetaMedia | None = getattr(meta_msg, meta_msg.type, None)
+            media_obj: MetaMedia | None = getattr(
+                meta_msg, meta_msg.type, None)
             if not media_obj:
                 return
 
@@ -36,7 +40,7 @@ class MediaService:
 
             await self.storage.upload_file(file_content, r2_key, mime_type)
 
-            await self.uow.messages.add_media_file(
+            await self.messages.add_media_file(
                 message_id=message_id,
                 meta_media_id=media_obj.id,
                 file_name=filename,

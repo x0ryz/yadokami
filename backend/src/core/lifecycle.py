@@ -4,7 +4,7 @@ from typing import Set
 
 from fastapi import FastAPI
 
-from src.core.broker import broker
+from src.core.broker import broker, setup_jetstream
 from src.core.database import engine
 from src.core.logger import setup_logging
 from src.core.websocket import nats_listener
@@ -26,6 +26,10 @@ async def initialize_broker() -> None:
     """Initialize the NATS broker for publishing (not worker mode)."""
     await broker.connect()
     logger.info("NATS broker connected for publishing")
+
+    # Setup JetStream streams and KV buckets
+    await setup_jetstream()
+    logger.info("JetStream setup completed")
 
 
 async def shutdown_background_tasks() -> None:

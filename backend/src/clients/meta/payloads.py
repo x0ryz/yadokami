@@ -1,6 +1,3 @@
-"""Builder for Meta (WhatsApp) API payloads."""
-
-
 class MetaPayloadBuilder:
     """Static builder class for constructing Meta API request payloads."""
 

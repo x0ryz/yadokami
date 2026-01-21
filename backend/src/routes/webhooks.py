@@ -4,10 +4,12 @@ import json
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.core.broker import broker
-from src.core.dependencies import get_uow
+from src.core.dependencies import get_session
 from src.core.exceptions import AuthError, BadRequestError
-from src.core.uow import UnitOfWork
+from src.repositories.waba import WabaRepository
 from src.schemas import WebhookEvent
 
 router = APIRouter(prefix="/webhook", tags=["Webhooks"])
@@ -18,8 +20,7 @@ def verify_signature(raw_body: bytes, signature: str | None, app_secret: str) ->
     Перевіряє підпис вебхука, використовуючи переданий app_secret.
     """
     if not app_secret:
-        logger.critical(
-            "META_APP_SECRET is not set! Webhook security is compromised.")
+        logger.critical("META_APP_SECRET is not set! Webhook security is compromised.")
         raise AuthError(detail="Server misconfiguration")
 
     if not signature:
@@ -52,14 +53,14 @@ async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
     hub_challenge: str = Query(alias="hub.challenge"),
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ):
     expected_token = None
 
-    async with uow:
-        account = await uow.waba.get_credentials()
-        if account and account.verify_token:
-            expected_token = account.verify_token
+    # Fetch the verification token from the database
+    account = await WabaRepository(session).get_credentials()
+    if account and account.verify_token:
+        expected_token = account.verify_token
 
     if hub_mode == "subscribe" and hub_verify_token == expected_token:
         logger.info("Webhook verified successfully via GET challenge")
@@ -73,7 +74,7 @@ async def verify_webhook(
 async def receive_webhook(
     request: Request,
     x_hub_signature_256: str | None = Header(default=None),
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         raw_body = await request.body()
@@ -83,10 +84,9 @@ async def receive_webhook(
 
     app_secret = None
 
-    async with uow:
-        account = await uow.waba.get_credentials()
-        if account and account.app_secret:
-            app_secret = account.app_secret
+    account = await WabaRepository(session).get_credentials()
+    if account and account.app_secret:
+        app_secret = account.app_secret
 
     verify_signature(raw_body, x_hub_signature_256, app_secret)
 

@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import selectinload
+
 from src.models import Contact, ContactStatus, Tag, get_utc_now
 from src.repositories.base import BaseRepository
 from src.schemas.contacts import ContactCreate, ContactUpdate
@@ -119,3 +120,12 @@ class ContactRepository(BaseRepository[Contact]):
         stmt = select(func.count()).where(Contact.unread_count > 0)
         result = await self.session.execute(stmt)
         return result.scalar() or 0
+
+    async def update_activity(self, phone: str) -> Contact:
+        """Updates the last activity timestamp of a contact."""
+        contact = await self.get_or_create(phone)
+        contact.unread_count += 1
+        contact.updated_at = get_utc_now()
+        contact.last_incoming_message_at = get_utc_now()
+        self.add(contact)
+        return contact

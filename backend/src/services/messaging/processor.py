@@ -1,6 +1,7 @@
-from src.core.uow import UnitOfWork
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.schemas import MetaWebhookPayload
-from src.services.campaign.stats import CampaignStatsService
+from src.services.campaign.tracker import CampaignTrackerService
 from src.services.media.service import MediaService
 from src.services.messaging.handlers import (
     IncomingMessageHandler,
@@ -13,37 +14,27 @@ from src.services.notifications.service import NotificationService
 class MessageProcessorService:
     """
     Webhook event dispatcher.
-
-    This service receives Meta webhook payloads and routes them
-    to specialized handlers based on event type.
-
-    Responsibilities:
-    - Parse webhook payload
-    - Route to appropriate handler (incoming, status, system)
-    - No business logic - pure delegation
     """
 
     def __init__(
         self,
-        uow: UnitOfWork,
+        session: AsyncSession,
         media_service: MediaService,
         notifier: NotificationService,
     ):
-        self.uow = uow
+        self.session = session
 
-        # Initialize specialized handlers
-        self.campaign_stats = CampaignStatsService(uow)
-        self.incoming_handler = IncomingMessageHandler(
-            uow, media_service, notifier)
-        self.status_handler = StatusHandler(uow, notifier, self.campaign_stats)
-        self.system_handler = SystemEventHandler(uow, notifier)
+        self.campaign_tracker = CampaignTrackerService(session)
+
+        self.incoming_handler = IncomingMessageHandler(session, media_service, notifier)
+
+        self.status_handler = StatusHandler(session, notifier, self.campaign_tracker)
+
+        self.system_handler = SystemEventHandler(session, notifier)
 
     async def process_webhook(self, webhook: MetaWebhookPayload):
         """
         Process incoming webhook by routing to appropriate handlers.
-
-        Args:
-            webhook: Parsed Meta webhook payload
         """
         for entry in webhook.entry:
             waba_id = entry.id

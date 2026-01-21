@@ -2,11 +2,14 @@ import mimetypes
 import uuid
 
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.clients.meta import MetaClient, MetaPayloadBuilder
 from src.core.config import settings
-from src.core.uow import UnitOfWork
 from src.models import Contact, Message, MessageDirection, MessageStatus
+from src.repositories.contact import ContactRepository
+from src.repositories.message import MessageRepository
+from src.repositories.waba import WabaPhoneRepository
 from src.schemas import WhatsAppMessage
 from src.services.media.storage import StorageService
 from src.services.notifications.service import NotificationService
@@ -16,52 +19,56 @@ class MessageSenderService:
     """
     Message sending service.
 
-    IMPORTANT: This service manages transactions.
     Each public method commits its changes.
     """
 
     def __init__(
         self,
-        uow: UnitOfWork,
+        session: AsyncSession,
         meta_client: MetaClient,
         notifier: NotificationService,
         storage: StorageService | None = None,
     ):
-        self.uow = uow
+        self.session = session
         self.meta_client = meta_client
         self.notifier = notifier
         self.storage = storage or StorageService()
 
+        # Initialize repositories
+        self.contacts = ContactRepository(session)
+        self.messages = MessageRepository(session)
+        self.waba_phones = WabaPhoneRepository(session)
+
     async def send_manual_message(self, message: WhatsAppMessage):
-        """
-        Send a manual message (from API).
-        This method manages its own transaction.
-        """
-        async with self.uow:
-            contact = await self.uow.contacts.get_or_create(message.phone_number)
+        """Send a manual message (from API)."""
+        contact = await self.contacts.get_or_create(message.phone_number)
 
-            template_id = None
-            template_name = None
+        template_id = None
+        template_name = None
 
-            if message.type == "template":
-                template = await self.uow.templates.get_active_by_id(message.body)
-                if template:
-                    template_id = template.id
-                    template_name = template.name
-                else:
-                    logger.error(f"Template {message.body} not found")
-                    return
+        if message.type == "template":
+            from src.repositories.template import TemplateRepository
+            template_repo = TemplateRepository(self.session)
+            template = await template_repo.get_active_by_id(message.body)
+            if template:
+                template_id = template.id
+                template_name = template.name
+            else:
+                logger.error(f"Template {message.body} not found")
+                return
 
-            await self._send_and_commit(
-                contact=contact,
-                message_type=message.type,
-                body=message.body,
-                template_id=template_id,
-                template_name=template_name,
-                is_campaign=False,
-                reply_to_message_id=message.reply_to_message_id,
-                phone_id=str(message.phone_id) if message.phone_id else None
-            )
+        await self.send_to_contact(
+            contact=contact,
+            message_type=message.type,
+            body=message.body,
+            template_id=template_id,
+            template_name=template_name,
+            is_campaign=False,
+            reply_to_message_id=message.reply_to_message_id,
+            phone_id=str(message.phone_id) if message.phone_id else None
+        )
+
+        await self.session.commit()
 
     async def send_media_message(
         self,
@@ -72,152 +79,121 @@ class MessageSenderService:
         caption: str | None = None,
         phone_id: str | None = None,
     ) -> Message:
-        """
-        Send a media message with file upload.
+        """Send a media message with file upload."""
+        # Step 1: Get or create contact
+        contact = await self.contacts.get_or_create(phone_number)
 
-        Process:
-        1. Get or create contact
-        2. Upload file to R2 (permanent storage)
-        3. Upload file to Meta (get temporary media_id)
-        4. Create message in DB
-        5. Send message via Meta API
-        6. Link media file to message
+        # Step 2: Get WABA phone
+        waba_phone = await self._get_preferred_phone(contact, phone_id)
+        if not waba_phone:
+            raise ValueError("No eligible WABA Phone found")
 
-        Args:
-            phone_number: Recipient phone number
-            file_bytes: Binary file content
-            filename: Original filename
-            mime_type: File MIME type
-            caption: Optional caption text
+        # Step 3: Upload to R2 (permanent storage)
+        media_type = self._get_media_type(mime_type)
+        ext = mimetypes.guess_extension(mime_type) or ""
+        r2_filename = f"{uuid.uuid4()}{ext}"
+        r2_key = f"whatsapp/{media_type}s/{r2_filename}"
 
-        Returns:
-            Message: Created message object
+        logger.info(f"Uploading to R2: {r2_key}")
+        await self.storage.upload_file(file_bytes, r2_key, mime_type)
 
-        Raises:
-            Exception: If any step fails
-        """
-        async with self.uow:
-            # Step 1: Get or create contact
-            contact = await self.uow.contacts.get_or_create(phone_number)
+        # Step 4: Upload to Meta (get media_id)
+        logger.info(f"Uploading to Meta for phone {phone_number}")
+        meta_media_id = await self.meta_client.upload_media(
+            phone_id=waba_phone.phone_number_id,
+            file_bytes=file_bytes,
+            mime_type=mime_type,
+            filename=filename,
+        )
 
-            # Step 2: Get WABA phone
-            waba_phone = await self._get_preferred_phone(contact, phone_id)
-            if not waba_phone:
-                # Fallback: get ANY phone if default isn't set?
-                # Or just error out. User said they have multiple numbers.
-                # If we return None here, it errors.
-                raise ValueError(
-                    "No eligible WABA Phone found (check phone_id or default phone config).")
+        logger.info(f"Meta media_id: {meta_media_id}")
 
-            # Step 3: Upload to R2 (permanent storage)
-            media_type = self._get_media_type(mime_type)
-            ext = mimetypes.guess_extension(mime_type) or ""
-            r2_filename = f"{uuid.uuid4()}{ext}"
-            r2_key = f"whatsapp/{media_type}s/{r2_filename}"
+        # Step 5: Create message entity
+        message = await self.messages.create(
+            waba_phone_id=waba_phone.id,
+            contact_id=contact.id,
+            direction=MessageDirection.OUTBOUND,
+            status=MessageStatus.PENDING,
+            message_type=media_type,
+            body=caption,
+        )
 
-            logger.info(f"Uploading to R2: {r2_key}")
-            await self.storage.upload_file(file_bytes, r2_key, mime_type)
+        await self.session.flush()
+        await self.session.refresh(message)
 
-            # Step 4: Upload to Meta (get media_id)
-            logger.info(f"Uploading to Meta for phone {phone_number}")
-            meta_media_id = await self.meta_client.upload_media(
-                phone_id=waba_phone.phone_number_id,
-                file_bytes=file_bytes,
-                mime_type=mime_type,
-                filename=filename,
-            )
+        # Step 6: Save media file metadata
+        await self.messages.add_media_file(
+            message_id=message.id,
+            meta_media_id=meta_media_id,
+            file_name=filename,
+            file_mime_type=mime_type,
+            file_size=len(file_bytes),
+            caption=caption,
+            r2_key=r2_key,
+            bucket_name=settings.R2_BUCKET_NAME,
+        )
 
-            logger.info(f"Meta media_id: {meta_media_id}")
+        # Step 7: Update contact
+        contact.updated_at = message.created_at
+        contact.last_message_at = message.created_at
+        contact.last_message_id = message.id
+        self.session.add(contact)
 
-            # Step 5: Create message entity
-            message = await self.uow.messages.create(
-                waba_phone_id=waba_phone.id,
-                contact_id=contact.id,
-                direction=MessageDirection.OUTBOUND,
-                status=MessageStatus.PENDING,
-                message_type=media_type,
-                body=caption,
-            )
-
-            await self.uow.session.flush()
-            await self.uow.session.refresh(message)
-
-            # Step 6: Save media file metadata
-            await self.uow.messages.add_media_file(
-                message_id=message.id,
-                meta_media_id=meta_media_id,
-                file_name=filename,
-                file_mime_type=mime_type,
-                file_size=len(file_bytes),
+        # Step 8: Send via Meta API
+        try:
+            payload = MetaPayloadBuilder.build_media_message(
+                to_phone=phone_number,
+                media_type=media_type,
+                media_id=meta_media_id,
                 caption=caption,
-                r2_key=r2_key,
-                bucket_name=settings.R2_BUCKET_NAME,
             )
 
-            # Step 7: Update contact
-            contact.updated_at = message.created_at
-            contact.last_message_at = message.created_at
-            contact.last_message_id = message.id
-            self.uow.session.add(contact)
+            result = await self.meta_client.send_message(
+                waba_phone.phone_number_id, payload
+            )
 
-            # Step 8: Send via Meta API
-            try:
-                payload = MetaPayloadBuilder.build_media_message(
-                    to_phone=phone_number,
-                    media_type=media_type,
-                    media_id=meta_media_id,
-                    caption=caption,
-                )
+            wamid = result.get("messages", [{}])[0].get("id")
 
-                result = await self.meta_client.send_message(
-                    waba_phone.phone_number_id, payload
-                )
+            if not wamid:
+                raise Exception("No WAMID in Meta response")
 
-                wamid = result.get("messages", [{}])[0].get("id")
+            # Update message with WAMID
+            message.wamid = wamid
+            message.status = MessageStatus.SENT
+            self.session.add(message)
 
-                if not wamid:
-                    raise Exception("No WAMID in Meta response")
+            await self.session.commit()
+            await self.session.refresh(message)
 
-                # Update message with WAMID
-                message.wamid = wamid
-                message.status = MessageStatus.SENT
-                self.uow.session.add(message)
+            logger.info(
+                f"Media message sent to {phone_number}. WAMID: {wamid}")
 
-                await self.uow.commit()
-                await self.uow.session.refresh(message)
+            # Notify
+            await self.notifier.notify_new_message(
+                message, phone=contact.phone_number
+            )
 
-                logger.info(
-                    f"Media message sent to {phone_number}. WAMID: {wamid}")
+            await self.notifier.notify_message_status(
+                message_id=message.id,
+                wamid=wamid,
+                status="sent",
+                phone=contact.phone_number,
+            )
 
-                # Notify
-                await self.notifier.notify_new_message(
-                    message, phone=contact.phone_number
-                )
+            return message
 
-                await self.notifier.notify_message_status(
-                    message_id=message.id,
-                    wamid=wamid,
-                    status="sent",
-                    phone=contact.phone_number,
-                )
-
-                return message
-
-            except Exception as e:
-                logger.error(f"Failed to send media to {phone_number}: {e}")
-                message.status = MessageStatus.FAILED
-                self.uow.session.add(message)
-                await self.uow.commit()
-                raise
+        except Exception as e:
+            logger.error(f"Failed to send media to {phone_number}: {e}")
+            message.status = MessageStatus.FAILED
+            self.session.add(message)
+            await self.session.commit()
+            raise
 
     async def send_reaction(
         self, contact: Contact, message_id: uuid.UUID, emoji: str = ""
     ):
-        """
-        Send (or remove) a reaction to a specific message.
-        To remove a reaction, pass an empty string as emoji.
-        """
-        target_message = await self.uow.messages.get_by_id(message_id)
+        """Send (or remove) a reaction to a specific message."""
+        target_message = await self.messages.get_by_id(message_id)
         if not target_message or not target_message.wamid:
             logger.error(
                 f"Cannot react: Message {message_id} not found or has no WAMID"
@@ -225,7 +201,7 @@ class MessageSenderService:
             return
 
         if target_message.waba_phone_id:
-            waba_phone = await self.uow.waba_phones.get_by_id(
+            waba_phone = await self.waba_phones.get_by_id(
                 target_message.waba_phone_id
             )
         else:
@@ -245,8 +221,8 @@ class MessageSenderService:
             await self.meta_client.send_message(waba_phone.phone_number_id, payload)
 
             target_message.reaction = emoji
-            self.uow.session.add(target_message)
-            await self.uow.commit()
+            self.session.add(target_message)
+            await self.session.commit()
 
             logger.info(f"Sent reaction '{emoji}' to {contact.phone_number}")
 
@@ -276,7 +252,7 @@ class MessageSenderService:
         """
         waba_phone = None
         if phone_id:
-            waba_phone = await self.uow.waba_phones.get_by_id(uuid.UUID(phone_id))
+            waba_phone = await self.waba_phones.get_by_id(uuid.UUID(phone_id))
         else:
             waba_phone = await self._get_preferred_phone(contact)
 
@@ -285,7 +261,7 @@ class MessageSenderService:
 
         context_wamid = None
         if reply_to_message_id:
-            parent_msg = await self.uow.messages.get_by_id(reply_to_message_id)
+            parent_msg = await self.messages.get_by_id(reply_to_message_id)
             if parent_msg:
                 context_wamid = parent_msg.wamid
             else:
@@ -293,7 +269,7 @@ class MessageSenderService:
                     f"Reply target message {reply_to_message_id} not found")
 
         # Create message entity
-        message = await self.uow.messages.create(
+        message = await self.messages.create(
             waba_phone_id=waba_phone.id,
             contact_id=contact.id,
             direction=MessageDirection.OUTBOUND,
@@ -304,13 +280,13 @@ class MessageSenderService:
             reply_to_message_id=reply_to_message_id,
         )
 
-        await self.uow.session.flush()
-        await self.uow.session.refresh(message)
+        await self.session.flush()
+        await self.session.refresh(message)
 
         contact.updated_at = message.created_at
         contact.last_message_at = message.created_at
         contact.last_message_id = message.id
-        self.uow.session.add(contact)
+        self.session.add(contact)
 
         if not is_campaign:
             await self.notifier.notify_new_message(message, phone=contact.phone_number)
@@ -360,7 +336,7 @@ class MessageSenderService:
             # Update message with WAMID
             message.wamid = wamid
             message.status = MessageStatus.SENT
-            self.uow.session.add(message)
+            self.session.add(message)
 
             logger.info(
                 f"Message sent to {contact.phone_number}. WAMID: {wamid}")
@@ -378,43 +354,11 @@ class MessageSenderService:
         except Exception as e:
             logger.error(f"Failed to send to {contact.phone_number}: {e}")
             message.status = MessageStatus.FAILED
-            self.uow.session.add(message)
-            raise
-
-    async def _send_and_commit(
-        self,
-        contact: Contact,
-        message_type: str,
-        body: str,
-        template_id: uuid.UUID | None,
-        template_name: str | None,
-        is_campaign: bool,
-
-        reply_to_message_id: uuid.UUID | None = None,
-        phone_id: str | None = None,
-    ):
-        try:
-            await self.send_to_contact(
-                contact=contact,
-                message_type=message_type,
-                body=body,
-                template_id=template_id,
-                template_name=template_name,
-                is_campaign=is_campaign,
-                reply_to_message_id=reply_to_message_id,
-                phone_id=phone_id,
-            )
-            await self.uow.commit()
-        except Exception:
-            await self.uow.commit()
+            self.session.add(message)
             raise
 
     def _get_media_type(self, mime_type: str) -> str:
-        """
-        Determine WhatsApp media type from MIME type.
-
-        Returns: image, video, audio, document, sticker
-        """
+        """Determine WhatsApp media type from MIME type."""
         if mime_type.startswith("image/"):
             if "webp" in mime_type:
                 return "sticker"
@@ -455,27 +399,20 @@ class MessageSenderService:
             raise ValueError(f"Unsupported message type: {message_type}")
 
     async def _get_preferred_phone(self, contact: Contact, phone_id: str | None = None):
-        """
-        Get the preferred phone number for a contact.
-        Strategies:
-        1. Use explicit phone_id if provided.
-        2. Use the phone number from the last message in the conversation.
-        3. Fallback to default phone number.
-        """
+        """Get the preferred phone number for a contact."""
         if phone_id:
             try:
-                # Validate UUID format if string
                 p_uuid = uuid.UUID(str(phone_id))
-                phone = await self.uow.waba_phones.get_by_id(p_uuid)
+                phone = await self.waba_phones.get_by_id(p_uuid)
                 if phone:
                     return phone
             except ValueError:
                 logger.warning(f"Invalid phone_id provided: {phone_id}")
 
         if contact.last_message_id:
-            last_msg = await self.uow.messages.get_by_id(contact.last_message_id)
+            last_msg = await self.messages.get_by_id(contact.last_message_id)
             if last_msg and last_msg.waba_phone_id:
-                phone = await self.uow.waba_phones.get_by_id(last_msg.waba_phone_id)
+                phone = await self.waba_phones.get_by_id(last_msg.waba_phone_id)
                 if phone:
                     return phone
 

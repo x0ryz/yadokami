@@ -1,8 +1,11 @@
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.core.exceptions import NotFoundError
-from src.core.uow import UnitOfWork
 from src.models.base import get_utc_now
+from src.repositories.contact import ContactRepository
+from src.repositories.message import MessageRepository
 from src.schemas.messages import MediaFileResponse, MessageResponse
 from src.services.media.storage import StorageService
 from src.services.notifications.service import NotificationService
@@ -20,54 +23,43 @@ class ChatService:
 
     def __init__(
         self,
-        uow: UnitOfWork,
+        session: AsyncSession,
         notifier: NotificationService,
         storage: StorageService | None = None,
     ):
-        self.uow = uow
+        self.session = session
         self.notifier = notifier
         self.storage = storage or StorageService()
+
+        # Ініціалізуємо репозиторії
+        self.contacts = ContactRepository(session)
+        self.messages = MessageRepository(session)
 
     async def get_chat_history(
         self, contact_id: UUID, limit: int = 50, offset: int = 0
     ) -> list[MessageResponse]:
-        """
-        Get chat history with a contact.
+        """Get chat history with a contact."""
 
-        Args:
-            contact_id: UUID of the contact
-            limit: Maximum number of messages to return
-            offset: Number of messages to skip
+        # Verify contact exists
+        contact = await self.contacts.get_by_id(contact_id)
+        if not contact:
+            raise NotFoundError(detail="Contact not found")
 
-        Returns:
-            List of messages in chronological order (oldest first)
+        # Mark messages as read
+        await self._mark_as_read(contact)
 
-        Raises:
-            NotFoundError: If contact doesn't exist
-        """
-        async with self.uow:
-            # Verify contact exists
-            contact = await self.uow.contacts.get_by_id(contact_id)
-            if not contact:
-                raise NotFoundError(detail="Contact not found")
+        # Get messages
+        messages = await self.messages.get_chat_history(contact_id, limit, offset)
 
-            # Mark messages as read
-            await self._mark_as_read(contact)
-
-            # Get messages
-            messages = await self.uow.messages.get_chat_history(
-                contact_id, limit, offset
-            )
-
-            # Format response
-            return await self._format_messages(messages)
+        # Format response
+        return await self._format_messages(messages)
 
     async def _mark_as_read(self, contact):
         """Mark messages as read and notify frontend sidebar."""
         if contact.unread_count > 0:
             contact.unread_count = 0
-            self.uow.session.add(contact)
-            await self.uow.session.flush()
+            self.session.add(contact)
+            await self.session.flush()
 
             await self.notifier._publish(
                 {
@@ -84,7 +76,7 @@ class ChatService:
                 }
             )
 
-            await self.uow.commit()
+            await self.session.commit()
 
     async def _format_messages(self, messages) -> list[MessageResponse]:
         """Format messages with presigned media URLs."""
@@ -111,15 +103,7 @@ class ChatService:
         return list(reversed(response_data))
 
     async def _format_media_files(self, media_files) -> list[MediaFileResponse]:
-        """
-        Generate presigned URLs for media files.
-
-        Args:
-            media_files: List of MediaFile objects
-
-        Returns:
-            List of MediaFileResponse DTOs with presigned URLs
-        """
+        """Generate presigned URLs for media files."""
         media_dtos = []
 
         for mf in media_files:
@@ -139,9 +123,8 @@ class ChatService:
 
     async def mark_conversation_as_read(self, contact_id: UUID):
         """Mark conversation as read without fetching history."""
-        async with self.uow:
-            contact = await self.uow.contacts.get_by_id(contact_id)
-            if not contact:
-                raise NotFoundError(detail="Contact not found")
+        contact = await self.contacts.get_by_id(contact_id)
+        if not contact:
+            raise NotFoundError(detail="Contact not found")
 
-            await self._mark_as_read(contact)
+        await self._mark_as_read(contact)

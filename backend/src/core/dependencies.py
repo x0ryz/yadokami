@@ -2,10 +2,11 @@ from typing import AsyncGenerator
 
 import httpx
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.clients.meta import MetaClient
 from src.core.database import async_session_maker
-from src.core.uow import UnitOfWork
+from src.repositories.waba import WabaRepository
 from src.services.campaign.importer import ContactImportService
 from src.services.campaign.sender import CampaignSenderService
 from src.services.dashboard import DashboardService
@@ -18,27 +19,27 @@ from src.services.notifications.service import NotificationService
 from src.services.sync import SyncService
 
 
-def get_uow() -> UnitOfWork:
-    """Get Unit of Work instance with session factory."""
-    return UnitOfWork(session_factory=async_session_maker)
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Dependency for getting async session."""
+    async with async_session_maker() as session:
+        yield session
 
 
 async def get_meta_client(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ) -> AsyncGenerator[MetaClient, None]:
     """Get Meta API client instance with dynamic credentials from DB."""
 
     token = None
     base_url = None
 
-    async with uow:
-        account = await uow.waba.get_credentials()
-        if account:
-            if account.access_token:
-                token = account.access_token
+    account = await WabaRepository(session).get_credentials()
+    if account:
+        if account.access_token:
+            token = account.access_token
 
-            if hasattr(account, "graph_api_version") and account.graph_api_version:
-                base_url = f"https://graph.facebook.com/{account.graph_api_version}"
+        if hasattr(account, "graph_api_version") and account.graph_api_version:
+            base_url = f"https://graph.facebook.com/{account.graph_api_version}"
 
     async with httpx.AsyncClient(
         headers={
@@ -61,76 +62,76 @@ def get_notification_service() -> NotificationService:
 
 
 def get_sync_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     meta_client: MetaClient = Depends(get_meta_client),
 ) -> SyncService:
     """Get service for syncing WABA data from Meta."""
-    return SyncService(uow=uow, meta_client=meta_client)
+    return SyncService(session=session, meta_client=meta_client)
 
 
 def get_media_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     storage_service: StorageService = Depends(get_storage_service),
     meta_client: MetaClient = Depends(get_meta_client),
 ) -> MediaService:
     """Get service for handling media attachments."""
     return MediaService(
-        uow=uow, storage_service=storage_service, meta_client=meta_client
+        session=session, storage_service=storage_service, meta_client=meta_client
     )
 
 
 def get_message_sender_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     meta_client: MetaClient = Depends(get_meta_client),
     notifier: NotificationService = Depends(get_notification_service),
     storage: StorageService = Depends(get_storage_service),
 ) -> MessageSenderService:
     """Get service for sending WhatsApp messages."""
     return MessageSenderService(
-        uow=uow, meta_client=meta_client, notifier=notifier, storage=storage
+        session=session, meta_client=meta_client, notifier=notifier, storage=storage
     )
 
 
 def get_chat_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     notifier: NotificationService = Depends(get_notification_service),
     storage: StorageService = Depends(get_storage_service),
 ) -> ChatService:
     """Get service for managing chat history."""
-    return ChatService(uow=uow, notifier=notifier, storage=storage)
+    return ChatService(session=session, notifier=notifier, storage=storage)
 
 
 def get_message_processor_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     media_service: MediaService = Depends(get_media_service),
     notifier: NotificationService = Depends(get_notification_service),
 ) -> MessageProcessorService:
     """Get service for processing webhook messages."""
     return MessageProcessorService(
-        uow=uow, media_service=media_service, notifier=notifier
+        session=session, media_service=media_service, notifier=notifier
     )
 
 
 def get_contact_import_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ) -> ContactImportService:
     """Get service for importing contacts from CSV/Excel."""
-    return ContactImportService(uow=uow)
+    return ContactImportService(session=session)
 
 
 def get_campaign_sender_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
     message_sender: MessageSenderService = Depends(get_message_sender_service),
     notifier: NotificationService = Depends(get_notification_service),
 ) -> CampaignSenderService:
     """Get service for managing campaign sending."""
     return CampaignSenderService(
-        uow=uow, message_sender=message_sender, notifier=notifier
+        session=session, message_sender=message_sender, notifier=notifier
     )
 
 
 def get_dashboard_service(
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ) -> DashboardService:
     """Get service for dashboard statistics."""
-    return DashboardService(uow=uow)
+    return DashboardService(session=session)

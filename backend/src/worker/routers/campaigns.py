@@ -4,11 +4,11 @@ from faststream import Depends
 from faststream.nats import NatsMessage, NatsRouter
 
 from src.core.broker import broker
-from src.core.uow import UnitOfWork
+from src.core.database import async_session_maker
+from src.repositories.campaign import CampaignContactRepository
 from src.services.campaign.sender import CampaignSenderService
 from src.worker.dependencies import (
     get_campaign_sender_service,
-    get_uow,
     limiter,
     logger,
 )
@@ -58,7 +58,6 @@ async def handle_campaign_send(
 async def handle_campaign_start(
     campaign_id: str,
     service: CampaignSenderService = Depends(get_campaign_sender_service),
-    uow: UnitOfWork = Depends(get_uow),
 ):
     with logger.contextualize(campaign_id=campaign_id):
         try:
@@ -68,12 +67,15 @@ async def handle_campaign_start(
             batch_size = 100
             offset = 0
             while True:
-                async with uow:
-                    contacts = await uow.campaign_contacts.get_sendable_contacts(
+                async with async_session_maker() as session:
+                    repo = CampaignContactRepository(session)
+                    contacts = await repo.get_sendable_contacts(
                         UUID(campaign_id), limit=batch_size, offset=offset
                     )
+
                 if not contacts:
                     break
+
                 for link in contacts:
                     await broker.publish(
                         {
@@ -85,6 +87,60 @@ async def handle_campaign_start(
                         stream="campaigns",
                     )
                 offset += len(contacts)
+
             logger.info(f"Campaign started. Tasks published: {offset}")
         except Exception as e:
             logger.exception(f"Start failed: {e}")
+
+
+@router.subscriber("campaigns.resume", stream="campaigns", durable="campaign-resumer")
+async def handle_campaign_resume(
+    campaign_id: str,
+    service: CampaignSenderService = Depends(get_campaign_sender_service),
+):
+    with logger.contextualize(campaign_id=campaign_id):
+        try:
+            logger.info(f"Resuming campaign {campaign_id}")
+            await service.resume_campaign(UUID(campaign_id))
+
+            batch_size = 100
+            offset = 0
+            while True:
+                # Get remaining QUEUED contacts
+                async with async_session_maker() as session:
+                    repo = CampaignContactRepository(session)
+                    contacts = await repo.get_sendable_contacts(
+                        UUID(campaign_id), limit=batch_size, offset=offset
+                    )
+
+                if not contacts:
+                    break
+
+                for link in contacts:
+                    await broker.publish(
+                        {
+                            "campaign_id": campaign_id,
+                            "link_id": str(link.id),
+                            "contact_id": str(link.contact_id),
+                        },
+                        subject="campaigns.send",
+                        stream="campaigns",
+                    )
+                offset += len(contacts)
+
+            logger.info(f"Campaign resumed. Tasks published: {offset}")
+        except Exception as e:
+            logger.exception(f"Resume failed: {e}")
+
+
+@router.subscriber("campaigns.pause", stream="campaigns", durable="campaign-pauser")
+async def handle_campaign_pause(
+    campaign_id: str,
+    service: CampaignSenderService = Depends(get_campaign_sender_service),
+):
+    with logger.contextualize(campaign_id=campaign_id):
+        try:
+            logger.info(f"Pausing campaign {campaign_id}")
+            await service.pause_campaign(UUID(campaign_id))
+        except Exception as e:
+            logger.exception(f"Pause failed: {e}")

@@ -1,4 +1,5 @@
 import httpx
+from loguru import logger
 from tenacity import (
     retry,
     retry_if_exception,
@@ -50,6 +51,10 @@ class MetaClient:
             headers["X-Idempotency-Key"] = idempotency_key
 
         resp = await self.client.post(url, json=data, headers=headers)
+        logger.info(f"Meta API send_message status: {resp.status_code} | URL: {url}")
+
+        if resp.status_code >= 400:
+            logger.error(f"Meta API Error Response: {resp.text}")
         resp.raise_for_status()
         return resp.json()
 
@@ -71,6 +76,9 @@ class MetaClient:
         headers = self._get_headers()
 
         resp = await self.client.post(url, files=files, data=data, headers=headers)
+        logger.info(f"Meta API upload_media status: {resp.status_code} | URL: {url}")
+        if resp.status_code >= 400:
+            logger.error(f"Meta API Upload Error: {resp.text}")
         resp.raise_for_status()
 
         result = resp.json()
@@ -87,6 +95,9 @@ class MetaClient:
         params = {"fields": "name,account_review_status,business_verification_status"}
 
         resp = await self.client.get(url, params=params, headers=self._get_headers())
+        logger.info(
+            f"Meta API fetch_account_info response: {resp.status_code} for WABA: {waba_id}"
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -95,6 +106,9 @@ class MetaClient:
         url = f"{self.base_url}/{waba_id}/phone_numbers"
 
         resp = await self.client.get(url, headers=self._get_headers())
+        logger.info(
+            f"Meta API fetch_phone_numbers response: {resp.status_code} for WABA: {waba_id}"
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -102,6 +116,9 @@ class MetaClient:
         """Fetch media URL from Meta Graph API."""
         url = f"{self.base_url}/{media_id}"
         resp = await self.client.get(url, headers=self._get_headers())
+        logger.info(
+            f"Meta API get_media_url response: {resp.status_code} for Media ID: {media_id}"
+        )
         resp.raise_for_status()
         return resp.json().get("url")
 
@@ -110,6 +127,9 @@ class MetaClient:
         async with self.client.stream(
             "GET", media_url, headers=self._get_headers()
         ) as response:
+            logger.info(
+                f"Meta API stream_media_file response: {response.status_code} for URL: {media_url}"
+            )
             response.raise_for_status()
             async for chunk in response.aiter_bytes():
                 yield chunk
@@ -118,5 +138,8 @@ class MetaClient:
         """Fetch message template for a WABA account."""
         url = f"{self.base_url}/{waba_id}/message_templates"
         resp = await self.client.get(url, headers=self._get_headers())
+        logger.info(
+            f"Meta API fetch_templates response: {resp.status_code} for WABA: {waba_id}"
+        )
         resp.raise_for_status()
         return resp.json()

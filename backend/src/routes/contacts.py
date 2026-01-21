@@ -1,19 +1,21 @@
-from uuid import UUID
 import io
-import pandas as pd
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status, UploadFile, File
-from src.core.dependencies import get_chat_service, get_uow
+import pandas as pd
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.dependencies import get_chat_service, get_session
 from src.core.exceptions import BadRequestError, NotFoundError
-from src.core.uow import UnitOfWork
 from src.models.base import ContactStatus
+from src.repositories.contact import ContactRepository
 from src.schemas import MessageResponse
 from src.schemas.contacts import (
     ContactCreate,
+    ContactImportResult,
     ContactListResponse,
     ContactResponse,
     ContactUpdate,
-    ContactImportResult,
 )
 from src.services.messaging.chat import ChatService
 
@@ -26,40 +28,42 @@ async def get_contacts(
     offset: int = Query(0, ge=0),
     tags: list[UUID] = Query(default=None),
     status: ContactStatus | None = Query(default=None),
-    uow: UnitOfWork = Depends(get_uow),
+    session: AsyncSession = Depends(get_session),
 ):
     """Get all contacts sorted by unread count and last activity"""
-    async with uow:
-        contacts = await uow.contacts.get_paginated(
-            limit, offset, tag_ids=tags, status=status
-        )
-        return contacts
+    contacts = await ContactRepository(session).get_paginated(
+        limit, offset, tag_ids=tags, status=status
+    )
+    return contacts
 
 
 @router.get("/contacts/search")
-async def search_contacts(q: str, limit: int = 50, uow: UnitOfWork = Depends(get_uow)):
+async def search_contacts(
+    q: str, limit: int = 50, session: AsyncSession = Depends(get_session)
+):
     """Search contacts by phone number or name."""
-    async with uow:
-        contacts = await uow.contacts.search(q, limit)
-        return contacts
+    contacts = await ContactRepository(session).search(q, limit)
+    return contacts
 
 
 @router.post("/contacts", response_model=ContactResponse, status_code=201)
-async def create_contact(data: ContactCreate, uow: UnitOfWork = Depends(get_uow)):
-    async with uow:
-        contact = await uow.contacts.create_manual(data)
-        if not contact:
-            raise BadRequestError(detail="Contact exists")
+async def create_contact(
+    data: ContactCreate, session: AsyncSession = Depends(get_session)
+):
+    repo = ContactRepository(session)
+    contact = await repo.create_manual(data)
 
-        await uow.commit()
-        await uow.session.refresh(contact)
-        return contact
+    if not contact:
+        raise BadRequestError(detail="Contact exists")
+
+    await session.commit()
+    await session.refresh(contact)
+    return contact
 
 
 @router.post("/contacts/import", response_model=ContactImportResult)
 async def import_contacts(
-    file: UploadFile = File(...),
-    uow: UnitOfWork = Depends(get_uow)
+    file: UploadFile = File(...), session: AsyncSession = Depends(get_session)
 ):
     """Import contacts from Excel or CSV file."""
     if not file.filename:
@@ -68,9 +72,9 @@ async def import_contacts(
     content = await file.read()
 
     try:
-        if file.filename.endswith('.csv'):
+        if file.filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
-        elif file.filename.endswith(('.xls', '.xlsx')):
+        elif file.filename.endswith((".xls", ".xlsx")):
             df = pd.read_excel(io.BytesIO(content))
         else:
             raise BadRequestError("Unsupported file format. Use CSV or Excel.")
@@ -84,108 +88,102 @@ async def import_contacts(
     skipped_count = 0
     errors = []
 
-    async with uow:
-        for index, row in df.iterrows():
-            try:
-                # Basic extraction logic - try to find columns
-                phone = None
-                name = None
-                link = None
+    repo = ContactRepository(session)
 
-                # Naive column matching
-                for col in df.columns:
-                    val = str(row[col]) if not pd.isna(row[col]) else None
-                    if not val:
-                        continue
+    # Використовуємо сесію без "async with uow"
+    for index, row in df.iterrows():
+        try:
+            # Basic extraction logic - try to find columns
+            phone = None
+            name = None
+            link = None
 
-                    if 'phone' in col or 'телефон' in col:
-                        phone = val
-                    elif 'name' in col or 'ім\'я' in col or 'имя' in col:
-                        name = val
-                    elif 'link' in col or 'url' in col or 'силка' in col:
-                        link = val
-
-                if not phone:
-                    # Try to treat the first column as phone if explicitly not found?
-                    # Or just skip. User said "I have such file", assuming headers exist.
-                    # If simplified, maybe user wants us to guess column by content?
-                    # Sticking to column names for now as it's safer.
+            # Naive column matching
+            for col in df.columns:
+                val = str(row[col]) if not pd.isna(row[col]) else None
+                if not val:
                     continue
 
-                # Clean phone number
-                phone_digits = "".join(c for c in phone if c.isdigit())
+                if "phone" in col or "телефон" in col:
+                    phone = val
+                elif "name" in col or "ім'я" in col or "имя" in col:
+                    name = val
+                elif "link" in col or "url" in col or "силка" in col:
+                    link = val
 
-                if len(phone_digits) < 10:
-                    errors.append(
-                        f"Row {index + 1}: Invalid phone number '{phone}'")
-                    continue
+            if not phone:
+                continue
 
-                # Check duplicate
-                existing = await uow.contacts.get_by_phone(phone_digits)
-                if existing:
-                    skipped_count += 1
-                    continue
+            # Clean phone number
+            phone_digits = "".join(c for c in phone if c.isdigit())
 
-                # Create contact
-                contact_data = ContactCreate(
-                    phone_number=phone_digits,
-                    name=name,
-                    link=link,
-                    tag_ids=[]
-                )
+            if len(phone_digits) < 10:
+                errors.append(f"Row {index + 1}: Invalid phone number '{phone}'")
+                continue
 
-                await uow.contacts.create_manual(contact_data)
-                imported_count += 1
+            # Check duplicate
+            existing = await repo.get_by_phone(phone_digits)
+            if existing:
+                skipped_count += 1
+                continue
 
-            except Exception as e:
-                errors.append(f"Row {index + 1}: {str(e)}")
+            # Create contact
+            contact_data = ContactCreate(
+                phone_number=phone_digits, name=name, link=link, tag_ids=[]
+            )
 
-        await uow.commit()
+            await repo.create_manual(contact_data)
+            imported_count += 1
+
+        except Exception as e:
+            errors.append(f"Row {index + 1}: {str(e)}")
+
+    await session.commit()
 
     return ContactImportResult(
-        total=len(df),
-        imported=imported_count,
-        skipped=skipped_count,
-        errors=errors
+        total=len(df), imported=imported_count, skipped=skipped_count, errors=errors
     )
 
 
 @router.get("/contacts/{contact_id}", response_model=ContactResponse)
-async def get_contact(contact_id: UUID, uow: UnitOfWork = Depends(get_uow)):
+async def get_contact(contact_id: UUID, session: AsyncSession = Depends(get_session)):
     """Get single contact by ID"""
-    async with uow:
-        contact = await uow.contacts.get_by_id(contact_id)
-        if not contact:
-            raise NotFoundError(detail="Contact not found")
-        return contact
+    contact = await ContactRepository(session).get_by_id(contact_id)
+    if not contact:
+        raise NotFoundError(detail="Contact not found")
+    return contact
 
 
 @router.patch("/contacts/{contact_id}", response_model=ContactResponse)
 async def update_contact(
-    contact_id: UUID, data: ContactUpdate, uow: UnitOfWork = Depends(get_uow)
+    contact_id: UUID, data: ContactUpdate, session: AsyncSession = Depends(get_session)
 ):
     """Update contact details."""
-    async with uow:
-        contact = await uow.contacts.update(contact_id, data)
-        if not contact:
-            raise NotFoundError(detail="Contact not found")
+    repo = ContactRepository(session)
+    contact = await repo.update(contact_id, data)
 
-        await uow.commit()
-        await uow.session.refresh(contact)
+    if not contact:
+        raise NotFoundError(detail="Contact not found")
 
-        return contact
+    await session.commit()
+    await session.refresh(contact)
+
+    return contact
 
 
 @router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_contact(contact_id: UUID, uow: UnitOfWork = Depends(get_uow)):
+async def delete_contact(
+    contact_id: UUID, session: AsyncSession = Depends(get_session)
+):
     """Delete a contact."""
-    async with uow:
-        contact = await uow.contacts.get_by_id(contact_id)
-        if not contact:
-            raise NotFoundError(detail="Contact not found")
+    repo = ContactRepository(session)
+    contact = await repo.get_by_id(contact_id)
 
-        await uow.contacts.delete(contact_id)
-        await uow.commit()
+    if not contact:
+        raise NotFoundError(detail="Contact not found")
+
+    await repo.delete(contact_id)
+    await session.commit()
 
 
 @router.get("/contacts/{contact_id}/messages", response_model=list[MessageResponse])

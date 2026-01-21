@@ -3,28 +3,27 @@
 import uuid
 
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.uow import UnitOfWork
 from src.models import CampaignDeliveryStatus, MessageStatus
+from src.repositories.campaign import CampaignContactRepository, CampaignRepository
 
 
 class CampaignStatsService:
     """Manages campaign delivery statistics and status updates."""
 
-    def __init__(self, uow: UnitOfWork):
-        self.uow = uow
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.campaigns = CampaignRepository(session)
+        self.campaign_contacts = CampaignContactRepository(session)
 
     async def update_on_status_change(
         self, message_id: uuid.UUID, new_status: MessageStatus
     ) -> None:
         """
         Update campaign statistics when a message status changes.
-
-        Args:
-            message_id: Database ID of the message (UUID)
-            new_status: New message status (DELIVERED, READ, FAILED)
         """
-        campaign_link = await self.uow.campaign_contacts.get_by_message_id(message_id)
+        campaign_link = await self.campaign_contacts.get_by_message_id(message_id)
 
         if not campaign_link:
             return  # Not a campaign message
@@ -33,7 +32,7 @@ class CampaignStatsService:
         if campaign_link.status == CampaignDeliveryStatus.REPLIED:
             return
 
-        campaign = await self.uow.campaigns.get_by_id(campaign_link.campaign_id)
+        campaign = await self.campaigns.get_by_id(campaign_link.campaign_id)
         if not campaign:
             logger.warning(f"Campaign {campaign_link.campaign_id} not found")
             return
@@ -46,8 +45,8 @@ class CampaignStatsService:
         elif new_status == MessageStatus.FAILED:
             await self._handle_failed(campaign, campaign_link)
 
-        self.uow.campaigns.add(campaign)
-        self.uow.campaign_contacts.add(campaign_link)
+        self.campaigns.add(campaign)
+        self.campaign_contacts.add(campaign_link)
 
     async def _handle_delivered(self, campaign, campaign_link):
         """Handle transition to DELIVERED status."""
@@ -55,7 +54,6 @@ class CampaignStatsService:
             CampaignDeliveryStatus.READ,
             CampaignDeliveryStatus.FAILED,
         ]:
-            # Don't downgrade from READ or FAILED
             return
 
         campaign_link.status = CampaignDeliveryStatus.DELIVERED
@@ -72,5 +70,3 @@ class CampaignStatsService:
         """Handle transition to FAILED status."""
         campaign_link.status = CampaignDeliveryStatus.FAILED
         campaign.failed_count += 1
-        # Note: Don't decrement other counters since we don't know
-        # what the previous status was in the campaign_link

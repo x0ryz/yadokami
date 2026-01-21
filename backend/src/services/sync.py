@@ -1,51 +1,51 @@
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.clients.meta import MetaClient
-from src.core.uow import UnitOfWork
 from src.models import Template, WabaAccount, WabaPhoneNumber, get_utc_now
+from src.repositories.template import TemplateRepository
+from src.repositories.waba import WabaPhoneRepository, WabaRepository
 
 
 class SyncService:
-    def __init__(self, uow: UnitOfWork, meta_client: MetaClient):
-        self.uow = uow
+    def __init__(self, session: AsyncSession, meta_client: MetaClient):
+        self.session = session
         self.meta_client = meta_client
+        self.waba = WabaRepository(session)
+        self.waba_phones = WabaPhoneRepository(session)
+        self.templates = TemplateRepository(session)
 
     async def sync_account_data(self):
-        async with self.uow:
-            waba_account = await self.uow.waba.get_credentials()
-            if not waba_account:
-                logger.warning("No WABA accounts found in the database.")
-                return
+        waba_account = await self.waba.get_credentials()
+        if not waba_account:
+            logger.warning("No WABA accounts found in the database.")
+            return
 
-            logger.info(f"Syncing WABA account ID: {waba_account.waba_id}")
+        logger.info(f"Syncing WABA account ID: {waba_account.waba_id}")
 
-            try:
-                await self._sync_account_info(waba_account)
-                await self._sync_phone_numbers(waba_account)
-                await self._sync_templates(waba_account)
+        try:
+            await self._sync_account_info(waba_account)
+            await self._sync_phone_numbers(waba_account)
+            await self._sync_templates(waba_account)
 
-                await self.uow.commit()
-                logger.success(
-                    f"Synced account '{waba_account.name}' successfully")
+            await self.session.commit()
+            logger.success(f"Synced account '{waba_account.name}' successfully")
 
-            except Exception:
-                logger.exception(
-                    f"Failed to sync WABA ID {waba_account.waba_id}")
-                raise
+        except Exception:
+            logger.exception(f"Failed to sync WABA ID {waba_account.waba_id}")
+            raise
 
     async def _sync_account_info(self, waba_account: WabaAccount):
         account_info = await self.meta_client.fetch_account_info(waba_account.waba_id)
 
         waba_account.name = str(account_info.get("name", ""))
-        waba_account.account_review_status = account_info.get(
-            "account_review_status")
+        waba_account.account_review_status = account_info.get("account_review_status")
         waba_account.business_verification_status = account_info.get(
             "business_verification_status"
         )
 
-        self.uow.waba.add(waba_account)
-
-        assert self.uow.session is not None
-        await self.uow.session.flush()
+        self.session.add(waba_account)
+        await self.session.flush()
 
     async def _sync_phone_numbers(self, waba_account: WabaAccount):
         phones_data = await self.meta_client.fetch_phone_numbers(waba_account.waba_id)
@@ -58,7 +58,7 @@ class SyncService:
         if not phone_id:
             return
 
-        phone_obj = await self.uow.waba.get_by_phone_id(phone_id)
+        phone_obj = await self.waba_phones.get_by_phone_id(phone_id)
 
         if not phone_obj:
             phone_obj = WabaPhoneNumber(
@@ -71,13 +71,11 @@ class SyncService:
             )
         else:
             phone_obj.status = item.get("code_verification_status")
-            phone_obj.quality_rating = str(
-                item.get("quality_rating", "UNKNOWN"))
+            phone_obj.quality_rating = str(item.get("quality_rating", "UNKNOWN"))
             phone_obj.messaging_limit_tier = item.get("messaging_limit_tier")
             phone_obj.updated_at = get_utc_now()
 
-        assert self.uow.session is not None
-        self.uow.session.add(phone_obj)
+        self.session.add(phone_obj)
 
     async def _sync_templates(self, waba_account: WabaAccount):
         logger.info(f"Syncing templates for WABA: {waba_account.name}")
@@ -98,7 +96,7 @@ class SyncService:
         if not meta_id:
             return
 
-        existing = await self.uow.templates.get_by_meta_id(meta_id)
+        existing = await self.templates.get_by_meta_id(meta_id)
 
         status = str(item.get("status", "UNKNOWN"))
         components = item.get("components", [])
@@ -118,4 +116,4 @@ class SyncService:
             existing.components = components
             existing.updated_at = get_utc_now()
 
-        self.uow.templates.add(existing)
+        self.session.add(existing)
