@@ -12,6 +12,7 @@ import {
 } from "../../types";
 import CampaignForm from "./CampaignForm";
 import ContactImportForm from "./ContactImportForm";
+import MessagePreview from "./MessagePreview";
 
 interface CampaignDetailsProps {
   campaign: CampaignResponse;
@@ -316,6 +317,13 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
       <div className="flex-1 overflow-y-auto p-6">
         {activeTab === "overview" ? (
           <div className="space-y-6">
+            {/* Message Preview Section */}
+            <MessagePreview
+              messageType={campaign.message_type}
+              templateId={campaign.template_id}
+              messageBody={campaign.message_body}
+            />
+
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
               <h3 className="font-semibold text-gray-800 mb-3">
                 Деталі налаштувань
