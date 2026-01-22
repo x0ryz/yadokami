@@ -55,19 +55,19 @@ class ContactImportService:
             elif filename.lower().endswith((".xls", ".xlsx")):
                 df = pd.read_excel(io.BytesIO(file_content))
             else:
-                result.errors.append(
-                    "Unsupported file format. Use CSV or Excel.")
+                result.errors.append("Unsupported file format. Use CSV or Excel.")
                 return result
 
             result.total = len(df)
 
             phone_col = self._find_column(
-                df, ["phone", "phone_number", "телефон", "номер"]
+                df, ["phone", "phone_number", "телефон", "номер", "Numer"]
             )
             name_col = self._find_column(
-                df, ["name", "full_name", "ім'я", "фио"])
+                df, ["name", "full_name", "ім'я", "фио", "Imię"]
+            )
             link_col = self._find_column(
-                df, ["link", "url", "profile", "силка", "посилання"]
+                df, ["link", "url", "profile", "силка", "посилання", "Link"]
             )
 
             if not phone_col:
@@ -95,11 +95,14 @@ class ContactImportService:
 
                 # Додаємо всі інші колонки в custom_data
                 for col in df.columns:
-                    if col not in [phone_col, name_col, link_col] and pd.notna(row[col]):
+                    if col not in [phone_col, name_col, link_col] and pd.notna(
+                        row[col]
+                    ):
                         custom_data[str(col)] = str(row[col]).strip()
 
                 contacts_data.append(
-                    {"phone": phone, "name": name, "custom_data": custom_data})
+                    {"phone": phone, "name": name, "custom_data": custom_data}
+                )
 
             unique_contacts = {c["phone"]: c for c in contacts_data}.values()
 
@@ -177,8 +180,7 @@ class ContactImportService:
                     # Оновлюємо custom_data якщо є нові дані
                     new_custom_data = data.get("custom_data", {})
                     if new_custom_data:
-                        contact.custom_data = {
-                            **contact.custom_data, **new_custom_data}
+                        contact.custom_data = {**contact.custom_data, **new_custom_data}
                         updated = True
 
                     if updated:

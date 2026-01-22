@@ -16,7 +16,7 @@ from src.repositories.template import TemplateRepository
 from src.services.campaign.tracker import CampaignProgressTracker
 from src.services.messaging.sender import MessageSenderService
 from src.services.notifications.service import NotificationService
-from src.utils.template_renderer import render_template_params, count_template_parameters
+from src.utils.template_renderer import render_template_params
 
 
 class CampaignMessageExecutor:
@@ -64,7 +64,8 @@ class CampaignMessageExecutor:
             return False
 
         template_name, body_text, template_language_code = self._prepare_message_data(
-            campaign)
+            campaign
+        )
 
         # Prepare template parameters based on variable_mapping
         template_params = None
@@ -72,7 +73,11 @@ class CampaignMessageExecutor:
             f"Campaign {campaign_id} variable_mapping: {campaign.variable_mapping} "
             f"(type: {type(campaign.variable_mapping)}, len: {len(campaign.variable_mapping) if campaign.variable_mapping else 0})"
         )
-        if campaign.message_type == "template" and campaign.variable_mapping and len(campaign.variable_mapping) > 0:
+        if (
+            campaign.message_type == "template"
+            and campaign.variable_mapping
+            and len(campaign.variable_mapping) > 0
+        ):
             contact_data = {
                 "name": contact.name,
                 "phone_number": contact.phone_number,
@@ -105,8 +110,7 @@ class CampaignMessageExecutor:
             )
 
             now = get_utc_now()
-            self._update_after_send(
-                contact_link, contact, campaign, message.id, now)
+            self._update_after_send(contact_link, contact, campaign, message.id, now)
 
             # Commit changes to database
             await self.session.commit()
