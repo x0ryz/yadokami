@@ -12,13 +12,16 @@ router = APIRouter(prefix="/templates", tags=["Templates"])
 
 
 @router.get("", response_model=list[TemplateListResponse])
-async def list_templates(session: AsyncSession = Depends(get_session)):
+async def list_templates(
+    show_deleted: bool = False, session: AsyncSession = Depends(get_session)
+):
     """
     Get all message templates.
 
     Returns templates synced from Meta WhatsApp Business API.
+    By default excludes deleted templates. Set show_deleted=true to include them.
     """
-    return await TemplateRepository(session).get_all_sorted()
+    return await TemplateRepository(session).get_all_sorted(include_deleted=show_deleted)
 
 
 @router.get("/{template_id}", response_model=TemplateResponse)

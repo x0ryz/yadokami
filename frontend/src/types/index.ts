@@ -208,9 +208,26 @@ export interface Template {
   language: string;
   status: string;
   category: string;
-  components: Record<string, any>[];
+  components: TemplateComponent[];
+  is_deleted: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface TemplateComponent {
+  type: string;
+  format?: string;
+  text?: string;
+  example?: any;
+  buttons?: TemplateButton[];
+  [key: string]: any;
+}
+
+export interface TemplateButton {
+  type: string;
+  text?: string;
+  url?: string;
+  phone_number?: string;
 }
 
 // Error Types

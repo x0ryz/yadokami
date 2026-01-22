@@ -29,12 +29,12 @@ class TemplateRepository(BaseRepository[Template]):
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
-    async def get_all_sorted(self) -> list[Template]:
-        stmt = (
-            select(Template)
-            .where(Template.is_deleted == False)
-            .order_by(Template.name)
-        )
+    async def get_all_sorted(self, include_deleted: bool = False) -> list[Template]:
+        """Get all templates sorted by name. By default excludes deleted templates."""
+        stmt = select(Template)
+        if not include_deleted:
+            stmt = stmt.where(Template.is_deleted == False)
+        stmt = stmt.order_by(Template.name)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

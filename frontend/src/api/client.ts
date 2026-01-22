@@ -373,8 +373,10 @@ import {
   }
 
   // Templates
-  async listTemplates(): Promise<Template[]> {
-    const response = await this.client.get<Template[]>("/templates");
+  async listTemplates(showDeleted: boolean = false): Promise<Template[]> {
+    const response = await this.client.get<Template[]>("/templates", {
+      params: { show_deleted: showDeleted }
+    });
     return response.data;
   }
 

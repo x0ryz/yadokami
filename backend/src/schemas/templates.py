@@ -16,6 +16,7 @@ class TemplateResponse(UUIDMixin, TimestampMixin):
     status: str
     category: str
     components: list[dict[str, Any]] = Field(default_factory=list)
+    is_deleted: bool = False
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -36,13 +37,16 @@ class TemplateResponse(UUIDMixin, TimestampMixin):
     )
 
 
-class TemplateListResponse(BaseModel):
-    """Template list summary"""
+class TemplateListResponse(UUIDMixin, TimestampMixin):
+    """Template list with full details"""
 
-    id: UUID
+    waba_id: UUID
+    meta_template_id: str
     name: str
     language: str
     status: str
     category: str
+    components: list[dict[str, Any]] = Field(default_factory=list)
+    is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
