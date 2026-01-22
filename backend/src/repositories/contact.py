@@ -14,7 +14,8 @@ class ContactRepository(BaseRepository[Contact]):
 
     async def get_by_id(self, id: UUID) -> Contact | None:
         query = (
-            select(Contact).where(Contact.id == id).options(selectinload(Contact.tags))
+            select(Contact).where(Contact.id == id).options(
+                selectinload(Contact.tags))
         )
         result = await self.session.execute(query)
         return result.scalars().first()
@@ -27,7 +28,7 @@ class ContactRepository(BaseRepository[Contact]):
     async def get_or_create(self, phone_number: str) -> Contact:
         contact = await self.get_by_phone(phone_number)
         if not contact:
-            contact = Contact(phone_number=phone_number)
+            contact = Contact(phone_number=phone_number, custom_data={})
             self.session.add(contact)
             await self.session.flush()
         return contact
@@ -47,7 +48,8 @@ class ContactRepository(BaseRepository[Contact]):
             stmt = stmt.where(Contact.status == status)
         else:
             stmt = stmt.where(
-                Contact.status.not_in([ContactStatus.BLOCKED, ContactStatus.ARCHIVED])
+                Contact.status.not_in(
+                    [ContactStatus.BLOCKED, ContactStatus.ARCHIVED])
             )
 
         if tag_ids:
@@ -55,7 +57,8 @@ class ContactRepository(BaseRepository[Contact]):
 
         stmt = (
             stmt.order_by(
-                desc(Contact.unread_count), desc(Contact.last_message_at).nulls_last()
+                desc(Contact.unread_count), desc(
+                    Contact.last_message_at).nulls_last()
             )
             .offset(offset)
             .limit(limit)
@@ -78,7 +81,10 @@ class ContactRepository(BaseRepository[Contact]):
         if await self.get_by_phone(data.phone_number):
             return None
 
-        contact = Contact(**data.model_dump(exclude={"tag_ids"}), source="manual")
+        contact = Contact(
+            **data.model_dump(exclude={"tag_ids"}), source="manual")
+        if not contact.custom_data:
+            contact.custom_data = {}
         if data.tag_ids:
             tags_query = select(Tag).where(Tag.id.in_(data.tag_ids))
             tags_result = await self.session.execute(tags_query)
