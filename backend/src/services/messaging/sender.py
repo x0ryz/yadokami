@@ -45,6 +45,7 @@ class MessageSenderService:
 
         template_id = None
         template_name = None
+        template_language_code = None
 
         if message.type == "template":
             from src.repositories.template import TemplateRepository
@@ -53,6 +54,7 @@ class MessageSenderService:
             if template:
                 template_id = template.id
                 template_name = template.name
+                template_language_code = template.language
             else:
                 logger.error(f"Template {message.body} not found")
                 return
@@ -63,6 +65,7 @@ class MessageSenderService:
             body=message.body,
             template_id=template_id,
             template_name=template_name,
+            template_language_code=template_language_code,
             is_campaign=False,
             reply_to_message_id=message.reply_to_message_id,
             phone_id=str(message.phone_id) if message.phone_id else None
@@ -241,6 +244,7 @@ class MessageSenderService:
         body: str,
         template_id: uuid.UUID | None = None,
         template_name: str | None = None,
+        template_language_code: str | None = None,
         is_campaign: bool = False,
         reply_to_message_id: uuid.UUID | None = None,
         phone_id: str | None = None,
@@ -321,6 +325,7 @@ class MessageSenderService:
                 message_type=message_type,
                 body=body,
                 template_name=template_name,
+                template_language_code=template_language_code,
                 context_wamid=context_wamid,
             )
 
@@ -378,6 +383,7 @@ class MessageSenderService:
         message_type: str,
         body: str,
         template_name: str | None,
+        template_language_code: str | None = None,
         context_wamid: str | None = None,
     ) -> dict:
         """Build WhatsApp API payload using MetaPayloadBuilder."""
@@ -393,6 +399,7 @@ class MessageSenderService:
             return MetaPayloadBuilder.build_template_message(
                 to_phone=to_phone,
                 template_name=template_name,
+                language_code=template_language_code or "en_US",
                 context_wamid=context_wamid,
             )
         else:

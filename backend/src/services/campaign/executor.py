@@ -59,7 +59,8 @@ class CampaignMessageExecutor:
         if not self._can_send_message(campaign, contact_link):
             return False
 
-        template_name, body_text = self._prepare_message_data(campaign)
+        template_name, body_text, template_language_code = self._prepare_message_data(
+            campaign)
 
         try:
             message = await self.sender.send_to_contact(
@@ -68,6 +69,7 @@ class CampaignMessageExecutor:
                 body=body_text,
                 template_id=campaign.template_id,
                 template_name=template_name,
+                template_language_code=template_language_code,
                 is_campaign=True,
                 phone_id=str(campaign.waba_phone_id)
                 if campaign.waba_phone_id
@@ -75,7 +77,8 @@ class CampaignMessageExecutor:
             )
 
             now = get_utc_now()
-            self._update_after_send(contact_link, contact, campaign, message.id, now)
+            self._update_after_send(
+                contact_link, contact, campaign, message.id, now)
 
             # Commit changes to database
             await self.session.commit()
@@ -168,16 +171,18 @@ class CampaignMessageExecutor:
         return True
 
     @staticmethod
-    def _prepare_message_data(campaign: Campaign) -> tuple[str | None, str]:
+    def _prepare_message_data(campaign: Campaign) -> tuple[str | None, str, str | None]:
         """Prepare message data for sending."""
         template_name = None
+        template_language_code = None
         body_text = campaign.message_body
 
         if campaign.message_type == "template" and campaign.template:
             template_name = campaign.template.name
+            template_language_code = campaign.template.language
             body_text = template_name
 
-        return template_name, body_text
+        return template_name, body_text, template_language_code
 
     def _update_after_send(
         self, contact_link, contact: Contact, campaign: Campaign, message_id, now
