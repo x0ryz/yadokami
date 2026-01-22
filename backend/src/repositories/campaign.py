@@ -168,3 +168,31 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
         )
         result = await self.session.execute(stmt)
         return result.scalar()
+
+    async def update(
+        self, campaign_contact_id: UUID, **kwargs
+    ) -> CampaignContact | None:
+        """Update campaign contact."""
+        campaign_contact = await self.get_by_id(campaign_contact_id)
+        if not campaign_contact:
+            return None
+
+        for key, value in kwargs.items():
+            if value is not None and hasattr(campaign_contact, key):
+                setattr(campaign_contact, key, value)
+
+        campaign_contact.updated_at = get_utc_now()
+        self.session.add(campaign_contact)
+        await self.session.flush()
+        await self.session.refresh(campaign_contact)
+        return campaign_contact
+
+    async def delete_by_id(self, campaign_contact_id: UUID) -> bool:
+        """Delete campaign contact by id."""
+        campaign_contact = await self.get_by_id(campaign_contact_id)
+        if not campaign_contact:
+            return False
+
+        await self.session.delete(campaign_contact)
+        await self.session.flush()
+        return True

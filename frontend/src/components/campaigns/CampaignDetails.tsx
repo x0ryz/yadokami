@@ -28,6 +28,12 @@ interface CampaignDetailsProps {
     contacts: ContactImport[],
   ) => Promise<void>;
   onImportContacts: (campaignId: string, file: File) => Promise<void>;
+  onUpdateContact: (
+    campaignId: string,
+    contactId: string,
+    data: { name?: string | null; custom_data?: Record<string, any>; status?: string },
+  ) => Promise<void>;
+  onDeleteContact: (campaignId: string, contactId: string) => Promise<void>;
   showScheduleForm: boolean;
   onShowScheduleForm: (show: boolean) => void;
   currentPage?: number;
@@ -188,6 +194,8 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   onResume,
   onAddContacts,
   onImportContacts,
+  onUpdateContact,
+  onDeleteContact,
   showScheduleForm,
   onShowScheduleForm,
   currentPage = 1,
@@ -197,6 +205,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
 }) => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showAddContacts, setShowAddContacts] = useState(false);
+  const [editingContact, setEditingContact] = useState<CampaignContactResponse | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "contacts">(
     "overview",
   );
@@ -422,6 +431,11 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                         Додаткові дані
                       </th>
+                      {canEdit && (
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                          Дії
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -457,6 +471,24 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                             "-"
                           )}
                         </td>
+                        {canEdit && (
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setEditingContact(contact)}
+                                className="text-blue-600 hover:text-blue-800 text-xs"
+                              >
+                                Редагувати
+                              </button>
+                              <button
+                                onClick={() => onDeleteContact(campaign.id, contact.id)}
+                                className="text-red-600 hover:text-red-800 text-xs"
+                              >
+                                Видалити
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -570,6 +602,22 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           </div>
         </div>
       )}
+
+      {editingContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Редагувати контакт</h3>
+            <ContactEditForm
+              contact={editingContact}
+              onSubmit={async (data) => {
+                await onUpdateContact(campaign.id, editingContact.id, data);
+                setEditingContact(null);
+              }}
+              onCancel={() => setEditingContact(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -637,6 +685,95 @@ const ScheduleForm: React.FC<{
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           Запланувати
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const ContactEditForm: React.FC<{
+  contact: CampaignContactResponse;
+  onSubmit: (data: { name?: string | null; custom_data?: Record<string, any> }) => Promise<void>;
+  onCancel: () => void;
+}> = ({ contact, onSubmit, onCancel }) => {
+  const [name, setName] = useState(contact.name || "");
+  const [customDataJson, setCustomDataJson] = useState(
+    JSON.stringify(contact.custom_data || {}, null, 2)
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    try {
+      const parsedData = JSON.parse(customDataJson);
+      await onSubmit({ 
+        name: name.trim() || null, 
+        custom_data: parsedData 
+      });
+    } catch (err) {
+      setError("Невірний JSON формат");
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Телефон
+        </label>
+        <input
+          type="text"
+          value={contact.phone_number}
+          disabled
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Ім'я
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Введіть ім'я контакту"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Додаткові дані (JSON)
+        </label>
+        <textarea
+          value={customDataJson}
+          onChange={(e) => setCustomDataJson(e.target.value)}
+          rows={8}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+          placeholder='{"key": "value"}'
+        />
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+        <p className="mt-1 text-xs text-gray-500">
+          Введіть дані у форматі JSON. Приклад: {`{"firstName": "Іван", "city": "Київ"}`}
+        </p>
+      </div>
+
+      <div className="flex gap-2 justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+        >
+          Скасувати
+        </button>
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Зберегти
         </button>
       </div>
     </form>

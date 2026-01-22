@@ -372,6 +372,25 @@ import {
     return response.data;
   }
 
+  async updateCampaignContact(
+    campaignId: string,
+    contactId: string,
+    data: { name?: string | null; custom_data?: Record<string, any>; status?: string },
+  ): Promise<CampaignContactResponse> {
+    const response = await this.client.patch<CampaignContactResponse>(
+      `/campaigns/${campaignId}/contacts/${contactId}`,
+      data,
+    );
+    return response.data;
+  }
+
+  async deleteCampaignContact(
+    campaignId: string,
+    contactId: string,
+  ): Promise<void> {
+    await this.client.delete(`/campaigns/${campaignId}/contacts/${contactId}`);
+  }
+
   // Templates
   async listTemplates(showDeleted: boolean = false): Promise<Template[]> {
     const response = await this.client.get<Template[]>("/templates", {

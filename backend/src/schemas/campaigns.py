@@ -97,6 +97,14 @@ class CampaignResponse(UUIDMixin, TimestampMixin):
     )
 
 
+class CampaignContactUpdate(BaseModel):
+    """Campaign contact update schema"""
+
+    name: str | None = None
+    custom_data: dict[str, Any] | None = None
+    status: CampaignDeliveryStatus | None = None
+
+
 class CampaignContactResponse(BaseModel):
     """Contact information in the campaign"""
 

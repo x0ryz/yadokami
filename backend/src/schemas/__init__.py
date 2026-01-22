@@ -10,6 +10,7 @@ from .base import (
 # Campaigns
 from .campaigns import (
     CampaignContactResponse,
+    CampaignContactUpdate,
     CampaignCreate,
     CampaignResponse,
     CampaignSchedule,

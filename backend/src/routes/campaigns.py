@@ -9,9 +9,11 @@ from src.core.dependencies import get_contact_import_service, get_session
 from src.core.exceptions import BadRequestError, NotFoundError, ServiceUnavailableError
 from src.models import CampaignStatus, get_utc_now
 from src.repositories.campaign import CampaignContactRepository, CampaignRepository
+from src.repositories.contact import ContactRepository
 from src.repositories.template import TemplateRepository
 from src.schemas import (
     CampaignContactResponse,
+    CampaignContactUpdate,
     CampaignCreate,
     CampaignResponse,
     CampaignSchedule,
@@ -351,7 +353,8 @@ async def import_contacts_from_file(
     result = await import_service.import_file(campaign_id, content, file.filename)
 
     if result.errors and any("Unsupported file format" in e for e in result.errors):
-        raise BadRequestError(detail="Unsupported file format. Use .csv, .xlsx or .xls")
+        raise BadRequestError(
+            detail="Unsupported file format. Use .csv, .xlsx or .xls")
 
     logger.info(
         f"Import completed for campaign {campaign_id}: "
@@ -387,3 +390,98 @@ async def add_contacts_manually(
     )
 
     return result
+
+
+@router.patch(
+    "/{campaign_id}/contacts/{contact_id}", response_model=CampaignContactResponse
+)
+async def update_campaign_contact(
+    campaign_id: UUID,
+    contact_id: UUID,
+    data: CampaignContactUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Update campaign contact."""
+    campaign = await CampaignRepository(session).get_by_id(campaign_id)
+    if not campaign:
+        raise NotFoundError(detail="Campaign not found")
+
+    if campaign.status != CampaignStatus.DRAFT:
+        raise BadRequestError(
+            detail="Can only edit contacts in DRAFT campaigns",
+        )
+
+    campaign_contact_repo = CampaignContactRepository(session)
+
+    # Get campaign contact
+    campaign_contact = await campaign_contact_repo.get_by_id(contact_id)
+    if not campaign_contact or campaign_contact.campaign_id != campaign_id:
+        raise NotFoundError(detail="Contact not found in this campaign")
+
+    # Update only provided fields
+    update_data = data.model_dump(exclude_unset=True)
+
+    # Update contact name if provided
+    if "name" in update_data and update_data["name"] is not None:
+        contact_repo = ContactRepository(session)
+        contact = await contact_repo.get_by_id(campaign_contact.contact_id)
+        if contact:
+            contact.name = update_data["name"]
+            session.add(contact)
+
+    # Update custom_data if provided
+    if "custom_data" in update_data and update_data["custom_data"] is not None:
+        contact_repo = ContactRepository(session)
+        contact = await contact_repo.get_by_id(campaign_contact.contact_id)
+        if contact:
+            contact.custom_data = update_data["custom_data"]
+            session.add(contact)
+
+    # Update campaign contact status if provided
+    if "status" in update_data:
+        campaign_contact = await campaign_contact_repo.update(contact_id, status=update_data["status"])
+
+    await session.commit()
+    await session.refresh(campaign_contact, ["contact"])
+
+    logger.info(
+        f"Campaign contact updated: {contact_id} in campaign {campaign_id}")
+    return campaign_contact
+
+
+@router.delete("/{campaign_id}/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_campaign_contact(
+    campaign_id: UUID,
+    contact_id: UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete campaign contact."""
+    campaign = await CampaignRepository(session).get_by_id(campaign_id)
+    if not campaign:
+        raise NotFoundError(detail="Campaign not found")
+
+    if campaign.status != CampaignStatus.DRAFT:
+        raise BadRequestError(
+            detail="Can only delete contacts from DRAFT campaigns",
+        )
+
+    campaign_contact_repo = CampaignContactRepository(session)
+
+    # Get campaign contact
+    campaign_contact = await campaign_contact_repo.get_by_id(contact_id)
+    if not campaign_contact or campaign_contact.campaign_id != campaign_id:
+        raise NotFoundError(detail="Contact not found in this campaign")
+
+    deleted = await campaign_contact_repo.delete_by_id(contact_id)
+    if not deleted:
+        raise NotFoundError(detail="Failed to delete contact")
+
+    # Update campaign total_contacts count
+    campaign.total_contacts = await campaign_contact_repo.count_all(campaign_id)
+    session.add(campaign)
+
+    await session.commit()
+
+    logger.info(
+        f"Campaign contact deleted: {contact_id} from campaign {campaign_id}")
+    return None

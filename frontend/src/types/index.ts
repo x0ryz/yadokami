@@ -172,6 +172,12 @@ export interface CampaignContactResponse {
   retry_count: number;
 }
 
+export interface CampaignContactUpdate {
+  name?: string | null;
+  custom_data?: Record<string, any>;
+  status?: ContactStatus;
+}
+
 // Message Types
 export interface MessageResponse {
   id: string;

@@ -323,6 +323,37 @@ const CampaignsPage: React.FC = () => {
     }
   };
 
+  const handleUpdateCampaignContact = async (
+    campaignId: string,
+    contactId: string,
+    data: { name?: string | null; custom_data?: Record<string, any>; status?: string },
+  ) => {
+    try {
+      await apiClient.updateCampaignContact(campaignId, contactId, data);
+      await loadCampaignDetails(campaignId);
+    } catch (error) {
+      console.error("Помилка оновлення контакту кампанії:", error);
+      throw error;
+    }
+  };
+
+  const handleDeleteCampaignContact = async (
+    campaignId: string,
+    contactId: string,
+  ) => {
+    if (!window.confirm("Ви впевнені, що хочете видалити цей контакт з кампанії?")) {
+      return;
+    }
+    try {
+      await apiClient.deleteCampaignContact(campaignId, contactId);
+      await loadCampaignDetails(campaignId);
+      await loadCampaigns();
+    } catch (error) {
+      console.error("Помилка видалення контакту кампанії:", error);
+      throw error;
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-4">
       {/* Campaigns List */}
@@ -385,6 +416,8 @@ const CampaignsPage: React.FC = () => {
             onResume={handleResumeCampaign}
             onAddContacts={handleAddContacts}
             onImportContacts={handleImportContacts}
+            onUpdateContact={handleUpdateCampaignContact}
+            onDeleteContact={handleDeleteCampaignContact}
             showScheduleForm={showScheduleForm}
             onShowScheduleForm={setShowScheduleForm}
             currentPage={contactsPage}
