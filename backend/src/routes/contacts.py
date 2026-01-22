@@ -91,12 +91,12 @@ async def import_contacts(
     repo = ContactRepository(session)
 
     # Використовуємо сесію без "async with uow"
-    for index, row in df.iterrows():
+    for idx, (index, row) in enumerate(df.iterrows()):
         try:
             # Basic extraction logic - try to find columns
             phone = None
             name = None
-            link = None
+            custom_data = {}
 
             # Naive column matching
             for col in df.columns:
@@ -104,12 +104,16 @@ async def import_contacts(
                 if not val:
                     continue
 
-                if "phone" in col or "телефон" in col:
+                col_lower = col.lower()
+                if "phone" in col_lower or "телефон" in col_lower:
                     phone = val
-                elif "name" in col or "ім'я" in col or "имя" in col:
+                elif "name" in col_lower or "ім'я" in col_lower or "имя" in col_lower:
                     name = val
-                elif "link" in col or "url" in col or "силка" in col:
-                    link = val
+                elif "link" in col_lower or "url" in col_lower or "силка" in col_lower:
+                    custom_data["link"] = val
+                else:
+                    # Додаємо всі інші колонки в custom_data
+                    custom_data[col] = val
 
             if not phone:
                 continue
@@ -118,7 +122,7 @@ async def import_contacts(
             phone_digits = "".join(c for c in phone if c.isdigit())
 
             if len(phone_digits) < 10:
-                errors.append(f"Row {index + 1}: Invalid phone number '{phone}'")
+                errors.append(f"Row {idx + 2}: Invalid phone number '{phone}'")
                 continue
 
             # Check duplicate
@@ -129,14 +133,14 @@ async def import_contacts(
 
             # Create contact
             contact_data = ContactCreate(
-                phone_number=phone_digits, name=name, link=link, tag_ids=[]
+                phone_number=phone_digits, name=name, custom_data=custom_data, tag_ids=[]
             )
 
             await repo.create_manual(contact_data)
             imported_count += 1
 
         except Exception as e:
-            errors.append(f"Row {index + 1}: {str(e)}")
+            errors.append(f"Row {idx + 2}: {str(e)}")
 
     await session.commit()
 

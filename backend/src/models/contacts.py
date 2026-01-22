@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.core.database import Base
 from src.models.base import ContactStatus, TimestampMixin, UUIDMixin
 
@@ -18,14 +20,15 @@ class Contact(Base, UUIDMixin, TimestampMixin):
 
     phone_number: Mapped[str] = mapped_column(String, unique=True, index=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
-    link: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_data: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
     unread_count: Mapped[int] = mapped_column(default=0)
 
     status: Mapped[ContactStatus] = mapped_column(default=ContactStatus.ACTIVE)
 
     last_message_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("messages.id", use_alter=True,
-                   name="fk_contacts_last_message_id"),
+        ForeignKey("messages.id", use_alter=True, name="fk_contacts_last_message_id"),
         nullable=True,
     )
 
