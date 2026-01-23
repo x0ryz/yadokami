@@ -22,6 +22,21 @@ class TagRepository:
     async def get_by_id(self, tag_id: UUID) -> Tag | None:
         return await self.session.get(Tag, tag_id)
 
+    async def get_by_name(self, name: str) -> Tag | None:
+        """Get tag by name."""
+        query = select(Tag).where(Tag.name == name)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
+    async def get_or_create_tag(self, name: str, color: str = "#808080") -> Tag:
+        """Get existing tag by name or create new one."""
+        tag = await self.get_by_name(name)
+        if not tag:
+            tag = Tag(name=name, color=color)
+            self.session.add(tag)
+            await self.session.flush()
+        return tag
+
     async def get_by_ids(self, tag_ids: list[UUID]) -> list[Tag]:
         if not tag_ids:
             return []

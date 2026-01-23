@@ -91,52 +91,50 @@ import {
       offset = 0,
       tags?: string[],
       status?: string,
-    ): Promise<ContactListResponse[]> {
-      const response = await this.client.get<ContactListResponse[]>("/contacts", {
-        params: {
-          limit,
-          offset,
-          tags,
-          status,
-        },
-      });
-      return response.data;
-    }
-  
-    async createContact(data: ContactCreate): Promise<Contact> {
-      const response = await this.client.post<Contact>("/contacts", data);
-      return response.data;
-    }
-  
-    async searchContacts(
-      params: SearchContactsParams,
-    ): Promise<ContactListResponse[]> {
-      const response = await this.client.get<ContactListResponse[]>(
-        "/contacts/search",
-        { params },
-      );
-      return response.data;
-    }
-  
-    async getContact(contactId: string): Promise<Contact> {
-      const response = await this.client.get<Contact>(`/contacts/${contactId}`);
-      return response.data;
-    }
-  
-    async updateContact(
-      contactId: string,
-      data: ContactUpdate,
-    ): Promise<Contact> {
-      const response = await this.client.patch<Contact>(
-        `/contacts/${contactId}`,
-        data,
-      );
-      return response.data;
-    }
-  
-    async deleteContact(contactId: string): Promise<void> {
-      await this.client.delete(`/contacts/${contactId}`);
-    }
+    all?: boolean,
+  ): Promise<ContactListResponse[]> {
+    const response = await this.client.get<ContactListResponse[]>("/contacts", {
+      params: {
+        limit,
+        offset,
+        tags,
+        status,
+        all,
+      },
+    });
+    return response.data;
+  }
+
+async searchContacts(params: SearchContactsParams): Promise<Contact[]> {
+  const response = await this.client.get<Contact[]>("/contacts/search", {
+    params: {
+      q: params.q,
+      limit: params.limit || 50,
+    },
+  });
+  return response.data;
+}
+
+async createContact(data: ContactCreate): Promise<Contact> {
+  const response = await this.client.post<Contact>("/contacts", data);
+  return response.data;
+}
+
+async updateContact(
+  contactId: string,
+  data: ContactUpdate,
+): Promise<Contact> {
+  const response = await this.client.patch<Contact>(
+    `/contacts/${contactId}`,
+    data,
+  );
+  return response.data;
+}
+
+async deleteContact(contactId: string): Promise<void> {
+  await this.client.delete(`/contacts/${contactId}`);
+}
+
   
     async markContactAsRead(contactId: string): Promise<void> {
       await this.client.post(`/contacts/${contactId}/read`);

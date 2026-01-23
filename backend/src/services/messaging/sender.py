@@ -140,6 +140,10 @@ class MessageSenderService:
         contact.updated_at = message.created_at
         contact.last_message_at = message.created_at
         contact.last_message_id = message.id
+
+        # Змінюємо тег на "Очікуємо на відповідь" після відповіді
+        await self.contacts.set_auto_tag(contact, "Очікуємо на відповідь")
+
         self.session.add(contact)
 
         # Step 8: Send via Meta API
@@ -310,6 +314,10 @@ class MessageSenderService:
         contact.updated_at = message.created_at
         contact.last_message_at = message.created_at
         contact.last_message_id = message.id
+
+        # Змінюємо тег на "Очікуємо на відповідь" після відповіді
+        await self.contacts.set_auto_tag(contact, "Очікуємо на відповідь")
+
         self.session.add(contact)
 
         if not is_campaign:

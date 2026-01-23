@@ -57,6 +57,39 @@ class IncomingMessageHandler:
         # 2. Update Contact Activity
         contact = await self.contacts.update_activity(msg.from_)
 
+        # 2.0. Якщо контакт в архіві - робимо його активним
+        from src.models import ContactStatus
+        if contact.status == ContactStatus.ARCHIVED:
+            contact.status = ContactStatus.ACTIVE
+            self.contacts.add(contact)
+
+        # 2.1. Визначаємо який тег встановити
+        # "Новий користувач" ставиться ТІЛЬКИ якщо:
+        # 1) Контакт отримував шаблонне повідомлення
+        # 2) Це його ПЕРШЕ повідомлення (до цього не було інших inbound)
+        # 3) У нього ще немає тегу "Новий користувач"
+
+        # Перевіряємо ДО збереження нового повідомлення!
+        inbound_count = await self.contacts.get_inbound_message_count(contact.id)
+        is_first_message = (inbound_count == 0)
+
+        if is_first_message:
+            has_template = await self.contacts.has_received_template_message(contact.id)
+            has_new_user_tag = any(
+                tag.name == "Новий користувач" for tag in contact.tags)
+
+            if has_template and not has_new_user_tag:
+                # Тільки якщо всі умови виконуються - додаємо "Новий користувач" як manual tag
+                from src.repositories.tag import TagRepository
+                tag_repo = TagRepository(self.session)
+                new_user_tag = await tag_repo.get_or_create_tag("Новий користувач")
+                if new_user_tag not in contact.tags:
+                    contact.tags.append(new_user_tag)
+                    self.contacts.add(contact)
+
+        # Ставимо автоматичний тег "Потребує відповіді"
+        await self.contacts.set_auto_tag(contact, "Потребує відповіді")
+
         # 3. Campaign Tracker
         await self.campaign_tracker.handle_reply(contact.id)
 

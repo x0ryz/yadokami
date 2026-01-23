@@ -337,6 +337,38 @@ const ContactsPage: React.FC = () => {
     });
   }, []);
 
+  const handleContactTagsChanged = useCallback((data: any) => {
+    console.log("WS: Contact tags changed:", data);
+
+    setContacts((prev) => {
+      return prev.map((contact) => {
+        const isMatch =
+          (data.contact_id && contact.id === data.contact_id) ||
+          (data.phone && contact.phone_number === data.phone);
+
+        if (isMatch) {
+          return {
+            ...contact,
+            tags: data.tags || [],
+          };
+        }
+        return contact;
+      });
+    });
+
+    // Оновлюємо вибраний контакт якщо він змінився
+    if (selectedContact && selectedContact.id === data.contact_id) {
+      setSelectedContact((prev) =>
+        prev
+          ? {
+              ...prev,
+              tags: data.tags || [],
+            }
+          : prev
+      );
+    }
+  }, [selectedContact]);
+
   // Підписки на події
   useWSEvent(EventType.NEW_MESSAGE, handleNewMessage);
   useWSEvent(EventType.STATUS_UPDATE, handleMessageStatusUpdate);
@@ -347,6 +379,7 @@ const ContactsPage: React.FC = () => {
   useWSEvent(EventType.CONTACT_UNREAD_CHANGED, handleContactUnreadChanged);
   useWSEvent(EventType.MESSAGE_REACTION, handleMessageReaction);
   useWSEvent(EventType.CONTACT_SESSION_UPDATE, handleContactSessionUpdate);
+  useWSEvent(EventType.CONTACT_TAGS_CHANGED, handleContactTagsChanged);
 
   // Синхронізація selectedContact з оновленнями в масиві contacts
   useEffect(() => {
@@ -383,6 +416,7 @@ const ContactsPage: React.FC = () => {
         0,
         selectedFilterTags,
         status,
+        showArchived, // all=true для архівованих, щоб показати всі без фільтру тегів
       );
       setContacts(Array.isArray(data) ? data : []);
       setHasMoreContacts(Array.isArray(data) && data.length >= 50);
@@ -405,7 +439,8 @@ const ContactsPage: React.FC = () => {
         50,
         currentLength,
         selectedFilterTags,
-        status
+        status,
+        showArchived // all=true для архівованих
       );
 
       if (Array.isArray(newContacts) && newContacts.length > 0) {

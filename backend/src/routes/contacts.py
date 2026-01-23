@@ -3,12 +3,15 @@ from uuid import UUID
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import get_chat_service, get_session
 from src.core.exceptions import BadRequestError, NotFoundError
+from src.models import Contact
 from src.models.base import ContactStatus
 from src.repositories.contact import ContactRepository
+from src.repositories.tag import TagRepository
 from src.schemas import MessageResponse
 from src.schemas.contacts import (
     ContactCreate,
@@ -26,13 +29,22 @@ router = APIRouter(tags=["Contacts"])
 async def get_contacts(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    tags: list[UUID] = Query(default=None),
+    tags: list[UUID] | None = Query(default=None),
     status: ContactStatus | None = Query(default=None),
+    all: bool = Query(
+        default=False, description="Показати всі контакти (включно з тими, у кого немає тегів)"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Get all contacts sorted by unread count and last activity"""
+    """Get all contacts sorted by unread count and last activity
+
+    За замовчуванням показує всіх контактів з будь-якими тегами.
+    Для перегляду абсолютно всіх контактів (включно з тими, у кого немає тегів) встановіть all=true
+    """
+    show_only_with_tags = not all
+
     contacts = await ContactRepository(session).get_paginated(
-        limit, offset, tag_ids=tags, status=status
+        limit, offset, tag_ids=tags, status=status,
+        show_only_with_tags=show_only_with_tags
     )
     return contacts
 
@@ -219,10 +231,10 @@ async def get_available_fields(
     Get all available fields from all contacts in the system.
     Returns standard fields and all unique custom_data keys.
     """
-    repo = ContactRepository(session)
-
-    # Get all contacts with custom_data
-    contacts = await repo.get_paginated(limit=10000, offset=0)
+    # Query all contacts directly without status filtering
+    query = select(Contact)
+    result = await session.execute(query)
+    contacts = result.scalars().all()
 
     # Standard fields that are always available
     standard_fields = ["name", "phone_number"]
@@ -232,7 +244,7 @@ async def get_available_fields(
     for contact in contacts:
         if contact.custom_data:
             custom_fields_set.update(contact.custom_data.keys())
-
+    
     custom_fields = sorted(list(custom_fields_set))
 
     return {

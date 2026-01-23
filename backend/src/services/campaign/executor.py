@@ -110,7 +110,8 @@ class CampaignMessageExecutor:
             )
 
             now = get_utc_now()
-            self._update_after_send(contact_link, contact, campaign, message.id, now)
+            self._update_after_send(
+                contact_link, contact, campaign, message.id, now)
 
             # Commit changes to database
             await self.session.commit()
@@ -220,6 +221,8 @@ class CampaignMessageExecutor:
         self, contact_link, contact: Contact, campaign: Campaign, message_id, now
     ):
         """Update entities after successful message send."""
+        from src.models import ContactStatus
+
         # Update contact link
         contact_link.status = CampaignDeliveryStatus.SENT
         contact_link.message_id = message_id
@@ -229,6 +232,8 @@ class CampaignMessageExecutor:
         # Update contact
         contact.last_message_at = now
         contact.updated_at = now
+        # Після розсилки ставимо контакт в архів
+        contact.status = ContactStatus.ARCHIVED
         self.session.add(contact)
 
         # Update campaign stats

@@ -103,6 +103,21 @@ class NotificationService:
         )
         await self._publish(event.to_dict())
 
+    async def notify_contact_tags_changed(
+        self, contact_id: UUID, phone: str, tags: list[dict]
+    ):
+        """Notify about contact tags change"""
+        event = {
+            "event": "contact_tags_changed",
+            "data": {
+                "contact_id": str(contact_id),
+                "phone": phone,
+                "tags": tags,
+            },
+            "timestamp": get_utc_now().isoformat(),
+        }
+        await self._publish(event)
+
     async def notify_template_update(
         self, template_id: str, name: str, status: str, reason: str | None = None
     ):
