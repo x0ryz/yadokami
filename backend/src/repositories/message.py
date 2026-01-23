@@ -182,3 +182,14 @@ class MessageRepository(BaseRepository[Message]):
             return None
         except Exception:
             return None
+
+    async def has_received_template(
+        self, contact_id: UUID, template_id: UUID
+    ) -> bool:
+        """Check if contact has already received a message with this template."""
+        stmt = select(exists().where(
+            Message.contact_id == contact_id,
+            Message.template_id == template_id,
+            Message.direction == MessageDirection.OUTBOUND
+        ))
+        return await self.session.scalar(stmt)

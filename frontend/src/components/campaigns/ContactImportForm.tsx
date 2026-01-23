@@ -1,14 +1,19 @@
 import React, { useState } from "react";
-import { ContactImport } from "../../types";
+import { ContactImport, DuplicateCheckResult, DuplicateContact } from "../../types";
+import DuplicateContactsModal from "./DuplicateContactsModal";
 
 interface ContactImportFormProps {
-  onAddContacts: (contacts: ContactImport[]) => Promise<void>;
+  campaignId: string;
+  onAddContacts: (contacts: ContactImport[], forceAdd?: boolean) => Promise<void>;
+  onCheckDuplicates: (contacts: ContactImport[]) => Promise<DuplicateCheckResult>;
   onImportFile: (file: File) => Promise<void>;
   onCancel: () => void;
 }
 
 const ContactImportForm: React.FC<ContactImportFormProps> = ({
+  campaignId,
   onAddContacts,
+  onCheckDuplicates,
   onImportFile,
   onCancel,
 }) => {
@@ -17,6 +22,9 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
     { phone_number: "", name: "", tags: [], custom_data: {} },
   ]);
   const [file, setFile] = useState<File | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateContact[]>([]);
+  const [pendingContacts, setPendingContacts] = useState<ContactImport[]>([]);
 
   const addContactRow = () => {
     setContacts([...contacts, { phone_number: "", name: "", tags: [], custom_data: {} }]);
@@ -72,8 +80,37 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
     e.preventDefault();
     const validContacts = contacts.filter((c) => c.phone_number.trim());
     if (validContacts.length > 0) {
-      await onAddContacts(validContacts);
+      // Check for duplicates
+      const result = await onCheckDuplicates(validContacts);
+      
+      if (result.duplicates.length > 0) {
+        // Show modal if duplicates found
+        setDuplicates(result.duplicates);
+        setPendingContacts(validContacts);
+        setShowDuplicateModal(true);
+      } else {
+        // No duplicates, add directly
+        await onAddContacts(validContacts, false);
+      }
     }
+  };
+
+  const handleSkipDuplicates = async () => {
+    setShowDuplicateModal(false);
+    // Add only contacts that are not duplicates
+    const duplicatePhones = new Set(duplicates.map(d => d.phone_number));
+    const nonDuplicateContacts = pendingContacts.filter(
+      c => !duplicatePhones.has(c.phone_number)
+    );
+    if (nonDuplicateContacts.length > 0) {
+      await onAddContacts(nonDuplicateContacts, false);
+    }
+  };
+
+  const handleForceAdd = async () => {
+    setShowDuplicateModal(false);
+    // Add all contacts with force flag
+    await onAddContacts(pendingContacts, true);
   };
 
   const handleFileSubmit = async (e: React.FormEvent) => {
@@ -235,6 +272,14 @@ const ContactImportForm: React.FC<ContactImportFormProps> = ({
           </div>
         </form>
       )}
+
+      <DuplicateContactsModal
+        isOpen={showDuplicateModal}
+        duplicates={duplicates}
+        onClose={() => setShowDuplicateModal(false)}
+        onSkipDuplicates={handleSkipDuplicates}
+        onForceAdd={handleForceAdd}
+      />
     </div>
   );
 };

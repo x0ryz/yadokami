@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import CampaignContact, Contact, get_utc_now
 from src.repositories.campaign import CampaignContactRepository, CampaignRepository
 from src.repositories.contact import ContactRepository
+from src.repositories.message import MessageRepository
 from src.schemas import ContactImport, ContactImportResult
 
 
@@ -18,6 +19,7 @@ class ContactImportService:
         self.campaigns = CampaignRepository(session)
         self.contacts = ContactRepository(session)
         self.campaign_contacts = CampaignContactRepository(session)
+        self.messages = MessageRepository(session)
 
     def _normalize_phone(self, phone: any) -> str | None:
         if pd.isna(phone) or phone == "":
@@ -55,7 +57,8 @@ class ContactImportService:
             elif filename.lower().endswith((".xls", ".xlsx")):
                 df = pd.read_excel(io.BytesIO(file_content))
             else:
-                result.errors.append("Unsupported file format. Use CSV or Excel.")
+                result.errors.append(
+                    "Unsupported file format. Use CSV or Excel.")
                 return result
 
             result.total = len(df)
@@ -117,15 +120,69 @@ class ContactImportService:
 
         return result
 
-    async def add_contacts_manual(
+    async def check_duplicate_templates(
         self, campaign_id: UUID, contacts: list[ContactImport]
+    ) -> dict:
+        """Check if any contacts have already received this campaign's template."""
+        campaign = await self.campaigns.get_by_id_with_template(campaign_id)
+
+        if not campaign or not campaign.template_id:
+            return {"duplicates": [], "new_contacts": [c.phone_number for c in contacts]}
+
+        duplicates = []
+        new_contacts = []
+
+        for contact in contacts:
+            phone = self._normalize_phone(contact.phone_number)
+            if not phone:
+                continue
+
+            # Get or create contact
+            existing_contact = await self.contacts.get_by_phone(phone)
+
+            if existing_contact:
+                # Check if this contact already received this template
+                has_template = await self.messages.has_received_template(
+                    existing_contact.id, campaign.template_id
+                )
+
+                if has_template:
+                    duplicates.append({
+                        "phone_number": phone,
+                        "name": contact.name or existing_contact.name,
+                    })
+                else:
+                    new_contacts.append(phone)
+            else:
+                new_contacts.append(phone)
+
+        return {
+            "duplicates": duplicates,
+            "new_contacts": new_contacts
+        }
+
+    async def add_contacts_manual(
+        self, campaign_id: UUID, contacts: list[ContactImport], force_add: bool = False
     ) -> ContactImportResult:
+        # Check for duplicates if not forcing
+        if not force_add:
+            duplicate_check = await self.check_duplicate_templates(campaign_id, contacts)
+            # Filter out duplicates
+            allowed_phones = set(duplicate_check["new_contacts"])
+        else:
+            allowed_phones = None
+
         contacts_data = []
         skipped = 0
 
         for contact in contacts:
             phone = self._normalize_phone(contact.phone_number)
             if not phone:
+                skipped += 1
+                continue
+
+            # Skip if duplicate and not forcing
+            if allowed_phones is not None and phone not in allowed_phones:
                 skipped += 1
                 continue
 
@@ -180,7 +237,8 @@ class ContactImportService:
                     # Оновлюємо custom_data якщо є нові дані
                     new_custom_data = data.get("custom_data", {})
                     if new_custom_data:
-                        contact.custom_data = {**contact.custom_data, **new_custom_data}
+                        contact.custom_data = {
+                            **contact.custom_data, **new_custom_data}
                         updated = True
 
                     if updated:

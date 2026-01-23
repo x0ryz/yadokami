@@ -350,13 +350,28 @@ async deleteContact(contactId: string): Promise<void> {
     return response.data;
   }
 
+  async checkDuplicateContacts(
+    campaignId: string,
+    contacts: ContactImport[],
+  ): Promise<DuplicateCheckResult> {
+    const response = await this.client.post<DuplicateCheckResult>(
+      `/campaigns/${campaignId}/contacts/check-duplicates`,
+      contacts,
+    );
+    return response.data;
+  }
+
   async addContactsManually(
     campaignId: string,
     contacts: ContactImport[],
+    forceAdd: boolean = false,
   ): Promise<ContactImportResult> {
     const response = await this.client.post<ContactImportResult>(
       `/campaigns/${campaignId}/contacts`,
       contacts,
+      {
+        params: { force_add: forceAdd },
+      },
     );
     return response.data;
   }
