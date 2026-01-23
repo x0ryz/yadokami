@@ -365,10 +365,29 @@ async def import_contacts_from_file(
     return result
 
 
+@router.post("/{campaign_id}/contacts/check-duplicates")
+async def check_duplicate_contacts(
+    campaign_id: UUID,
+    contacts: list[ContactImport],
+    session: AsyncSession = Depends(get_session),
+    import_service: ContactImportService = Depends(get_contact_import_service),
+):
+    """Check if any contacts have already received this campaign's template."""
+    campaign = await CampaignRepository(session).get_by_id(campaign_id)
+
+    if not campaign:
+        raise NotFoundError(detail="Campaign not found")
+
+    result = await import_service.check_duplicate_templates(campaign_id, contacts)
+
+    return result
+
+
 @router.post("/{campaign_id}/contacts", response_model=ContactImportResult)
 async def add_contacts_manually(
     campaign_id: UUID,
     contacts: list[ContactImport],
+    force_add: bool = False,
     session: AsyncSession = Depends(get_session),
     import_service: ContactImportService = Depends(get_contact_import_service),
 ):
@@ -383,7 +402,7 @@ async def add_contacts_manually(
             detail="Can only add contacts to DRAFT campaigns",
         )
 
-    result = await import_service.add_contacts_manual(campaign_id, contacts)
+    result = await import_service.add_contacts_manual(campaign_id, contacts, force_add)
 
     logger.info(
         f"Manual add completed for campaign {campaign_id}: "

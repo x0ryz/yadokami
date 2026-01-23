@@ -107,6 +107,16 @@ export interface ContactImportResult {
   errors?: string[];
 }
 
+export interface DuplicateContact {
+  phone_number: string;
+  name: string | null;
+}
+
+export interface DuplicateCheckResult {
+  duplicates: DuplicateContact[];
+  new_contacts: string[];
+}
+
 // Campaign Types
 export interface CampaignResponse {
   id: string;

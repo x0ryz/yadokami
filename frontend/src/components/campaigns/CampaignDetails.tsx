@@ -13,6 +13,7 @@ import {
 import CampaignForm from "./CampaignForm";
 import ContactImportForm from "./ContactImportForm";
 import MessagePreview from "./MessagePreview";
+import apiClient from "../../api/client";
 
 interface CampaignDetailsProps {
   campaign: CampaignResponse;
@@ -26,6 +27,7 @@ interface CampaignDetailsProps {
   onAddContacts: (
     campaignId: string,
     contacts: ContactImport[],
+    forceAdd?: boolean,
   ) => Promise<void>;
   onImportContacts: (campaignId: string, file: File) => Promise<void>;
   onUpdateContact: (
@@ -620,9 +622,13 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-xl font-bold mb-4">Додати контакти</h3>
             <ContactImportForm
-              onAddContacts={async (contacts) => {
-                await onAddContacts(campaign.id, contacts);
+              campaignId={campaign.id}
+              onAddContacts={async (contacts, forceAdd) => {
+                await onAddContacts(campaign.id, contacts, forceAdd);
                 setShowAddContacts(false);
+              }}
+              onCheckDuplicates={async (contacts) => {
+                return await apiClient.checkDuplicateContacts(campaign.id, contacts);
               }}
               onImportFile={async (file) => {
                 await onImportContacts(campaign.id, file);

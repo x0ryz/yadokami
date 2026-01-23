@@ -301,9 +301,10 @@ const CampaignsPage: React.FC = () => {
   const handleAddContacts = async (
     campaignId: string,
     contacts: ContactImport[],
+    forceAdd: boolean = false,
   ) => {
     try {
-      await apiClient.addContactsManually(campaignId, contacts);
+      await apiClient.addContactsManually(campaignId, contacts, forceAdd);
       // Оновлюємо кампанію щоб отримати новий total_contacts
       const updatedCampaign = await apiClient.getCampaign(campaignId);
       setCampaigns(prev => prev.map(c => 
