@@ -162,6 +162,7 @@ class CampaignTrackerService:
             CampaignDeliveryStatus.READ,
             CampaignDeliveryStatus.FAILED,
             CampaignDeliveryStatus.REPLIED,
+            CampaignDeliveryStatus.DELIVERED,
         ]:
             return
 
@@ -189,7 +190,13 @@ class CampaignTrackerService:
         if campaign_link.status == CampaignDeliveryStatus.FAILED:
             return
 
+        # Декрементуємо попередній статус
+        if campaign_link.status == CampaignDeliveryStatus.READ:
+            campaign.read_count = max(0, campaign.read_count - 1)
+        elif campaign_link.status == CampaignDeliveryStatus.DELIVERED:
+            campaign.delivered_count = max(0, campaign.delivered_count - 1)
+        elif campaign_link.status == CampaignDeliveryStatus.SENT:
+            campaign.sent_count = max(0, campaign.sent_count - 1)
+
         campaign_link.status = CampaignDeliveryStatus.FAILED
         campaign.failed_count += 1
-        # Тут ми не декрементуємо Sent/Delivered, бо не знаємо попереднього стану напевно,
-        # або вважаємо Failed окремим фінальним статусом.

@@ -53,20 +53,43 @@ class CampaignStatsService:
         if campaign_link.status in [
             CampaignDeliveryStatus.READ,
             CampaignDeliveryStatus.FAILED,
+            CampaignDeliveryStatus.DELIVERED,
         ]:
             return
 
+        # Декрементуємо попередній статус
+        if campaign_link.status == CampaignDeliveryStatus.SENT:
+            campaign.sent_count = max(0, campaign.sent_count - 1)
+
         campaign_link.status = CampaignDeliveryStatus.DELIVERED
         campaign.delivered_count += 1
-        campaign.sent_count = max(0, campaign.sent_count - 1)
 
     async def _handle_read(self, campaign, campaign_link):
         """Handle transition to READ status."""
+        if campaign_link.status == CampaignDeliveryStatus.READ:
+            return
+
+        # Декрементуємо попередній статус
+        if campaign_link.status == CampaignDeliveryStatus.DELIVERED:
+            campaign.delivered_count = max(0, campaign.delivered_count - 1)
+        elif campaign_link.status == CampaignDeliveryStatus.SENT:
+            campaign.sent_count = max(0, campaign.sent_count - 1)
+
         campaign_link.status = CampaignDeliveryStatus.READ
         campaign.read_count += 1
-        campaign.delivered_count = max(0, campaign.delivered_count - 1)
 
     async def _handle_failed(self, campaign, campaign_link):
         """Handle transition to FAILED status."""
+        if campaign_link.status == CampaignDeliveryStatus.FAILED:
+            return
+
+        # Декрементуємо попередній статус
+        if campaign_link.status == CampaignDeliveryStatus.READ:
+            campaign.read_count = max(0, campaign.read_count - 1)
+        elif campaign_link.status == CampaignDeliveryStatus.DELIVERED:
+            campaign.delivered_count = max(0, campaign.delivered_count - 1)
+        elif campaign_link.status == CampaignDeliveryStatus.SENT:
+            campaign.sent_count = max(0, campaign.sent_count - 1)
+
         campaign_link.status = CampaignDeliveryStatus.FAILED
         campaign.failed_count += 1
