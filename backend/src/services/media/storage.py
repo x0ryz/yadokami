@@ -79,6 +79,13 @@ class StorageService:
             )
             return object_name
 
+    def get_public_url(self, object_name: str) -> str:
+        """Генерує публічний URL для об'єкта (якщо налаштовано R2_PUBLIC_URL)"""
+        if settings.R2_PUBLIC_URL:
+            return f"{settings.R2_PUBLIC_URL}/{object_name}"
+        # Fallback до bucket URL якщо публічний домен не налаштовано
+        return f"https://{self.bucket}.{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/{object_name}"
+
     async def get_presigned_url(self, object_name: str, expires_in: int = 3600) -> str:
         async with self.session.client(
             service_name="s3",

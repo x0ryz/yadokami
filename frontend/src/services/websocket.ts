@@ -18,6 +18,7 @@ export enum EventType {
   MESSAGE_FAILED = "message_failed",
   MESSAGE_RECEIVED = "message_received",
   CONTACT_UNREAD_CHANGED = "contact_unread_changed",
+  CONTACT_SESSION_UPDATE = "contact_session_update",
   BATCH_PROGRESS = "batch_progress",
   SYNC_COMPLETED = "sync_completed",
   STATUS_UPDATE = "status_update",

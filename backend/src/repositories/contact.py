@@ -132,6 +132,7 @@ class ContactRepository(BaseRepository[Contact]):
         contact = await self.get_or_create(phone)
         contact.unread_count += 1
         contact.updated_at = get_utc_now()
+        contact.last_message_at = get_utc_now()
         contact.last_incoming_message_at = get_utc_now()
         self.add(contact)
         return contact

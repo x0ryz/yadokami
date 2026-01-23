@@ -28,6 +28,10 @@ const ContactsPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [messageOffset, setMessageOffset] = useState(0);
+  const MESSAGE_LIMIT = 50;
   const [searchQuery, setSearchQuery] = useState("");
 
   // Теги та фільтрація
@@ -79,10 +83,12 @@ const ContactsPage: React.FC = () => {
         ),
       );
 
-      // 2. Завантажуємо історію
-      loadMessages(selectedContact.id);
+      // 2. Скидаємо пагінацію та завантажуємо історію
+      setMessageOffset(0);
+      setHasMoreMessages(true);
+      loadMessages(selectedContact.id, 0, true);
     }
-  }, [selectedContact]);
+  }, [selectedContact?.id]);
 
   // --- WebSocket Handlers ---
 
@@ -117,7 +123,40 @@ const ContactsPage: React.FC = () => {
 
         setMessages((prev) => {
           if (!Array.isArray(prev)) return [data];
-          if (prev.some((m) => m.id === data.id)) return prev;
+          
+          // Перевіряємо чи повідомлення вже існує
+          const existingIndex = prev.findIndex(
+            (m) => 
+              (data.id && m.id === data.id) || 
+              (data.wamid && m.wamid && m.wamid === data.wamid)
+          );
+          
+          // Якщо повідомлення існує і прийшли медіа файли - оновлюємо його
+          if (existingIndex !== -1 && data.media_files && data.media_files.length > 0) {
+            console.log("WS: Updating message with media:", {
+              messageId: data.id,
+              mediaCount: data.media_files.length,
+              media: data.media_files
+            });
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              media_files: data.media_files,
+              body: data.body || updated[existingIndex].body,
+            };
+            return updated;
+          }
+          
+          // Якщо повідомлення вже є - не додаємо дублікат
+          if (existingIndex !== -1) {
+            console.log("WS: Message already exists, skipping duplicate:", data.id);
+            return prev;
+          }
+          
+          // Перевіряємо чи це оновлення для тимчасового повідомлення
+          const tempMsgIndex = prev.findIndex(
+            (m) => m.id && m.id.startsWith("temp-") && (!m.wamid || m.wamid === "")
+          );
 
           const newMessage: MessageResponse = {
             id: data.id,
@@ -132,20 +171,23 @@ const ContactsPage: React.FC = () => {
             reaction: data.reaction,
           };
 
+          // Якщо це OUTBOUND і є тимчасове повідомлення, замінюємо його
+          if (direction === MessageDirection.OUTBOUND && tempMsgIndex !== -1) {
+            const updated = [...prev];
+            updated[tempMsgIndex] = newMessage;
+            return updated.sort(
+              (a, b) =>
+                new Date(a.created_at || 0).getTime() -
+                new Date(b.created_at || 0).getTime(),
+            );
+          }
+
           return [...prev, newMessage].sort(
             (a, b) =>
               new Date(a.created_at || 0).getTime() -
               new Date(b.created_at || 0).getTime(),
           );
         });
-
-        if (isMedia && (!data.media_files || data.media_files.length === 0)) {
-          setTimeout(() => {
-            if (selectedContact) {
-              loadMessages(selectedContact.id);
-            }
-          }, 2000);
-        }
       }
 
       setContacts((prev) => {
@@ -258,6 +300,43 @@ const ContactsPage: React.FC = () => {
     );
   }, []);
 
+  const handleContactSessionUpdate = useCallback((data: any) => {
+    console.log("WS: Contact session update:", data);
+
+    setContacts((prev) => {
+      const updated = prev.map((contact) => {
+        const isMatch =
+          (data.contact_id && contact.id === data.contact_id) ||
+          (data.phone && contact.phone_number === data.phone);
+
+        if (isMatch) {
+          return {
+            ...contact,
+            last_message_at: data.last_message_at,
+            last_incoming_message_at: data.last_incoming_message_at,
+          };
+        }
+        return contact;
+      });
+
+      // Сортуємо після оновлення
+      return updated.sort((a, b) => {
+        const dateA = a.last_message_at
+          ? new Date(a.last_message_at).getTime()
+          : 0;
+        const dateB = b.last_message_at
+          ? new Date(b.last_message_at).getTime()
+          : 0;
+
+        // Спочатку за unread_count, потім за датою
+        if (a.unread_count !== b.unread_count) {
+          return b.unread_count - a.unread_count;
+        }
+        return dateB - dateA;
+      });
+    });
+  }, []);
+
   // Підписки на події
   useWSEvent(EventType.NEW_MESSAGE, handleNewMessage);
   useWSEvent(EventType.STATUS_UPDATE, handleMessageStatusUpdate);
@@ -267,6 +346,30 @@ const ContactsPage: React.FC = () => {
   useWSEvent(EventType.MESSAGE_FAILED, handleMessageStatusUpdate);
   useWSEvent(EventType.CONTACT_UNREAD_CHANGED, handleContactUnreadChanged);
   useWSEvent(EventType.MESSAGE_REACTION, handleMessageReaction);
+  useWSEvent(EventType.CONTACT_SESSION_UPDATE, handleContactSessionUpdate);
+
+  // Синхронізація selectedContact з оновленнями в масиві contacts
+  useEffect(() => {
+    if (selectedContact) {
+      const updatedContact = contacts.find((c) => c.id === selectedContact.id);
+      if (
+        updatedContact &&
+        updatedContact.last_incoming_message_at !==
+          selectedContact.last_incoming_message_at
+      ) {
+        setSelectedContact((prev) =>
+          prev
+            ? {
+                ...prev,
+                last_incoming_message_at:
+                  updatedContact.last_incoming_message_at,
+                last_message_at: updatedContact.last_message_at,
+              }
+            : prev,
+        );
+      }
+    }
+  }, [contacts]);
 
   // --- API Calls ---
 
@@ -327,17 +430,45 @@ const ContactsPage: React.FC = () => {
     }
   };
 
-  const loadMessages = async (contactId: string) => {
+  const loadMessages = async (contactId: string, offset = 0, reset = false) => {
     try {
-      setMessagesLoading(true);
-      const data = await apiClient.getChatHistory(contactId);
-      setMessages(Array.isArray(data) ? data : []);
+      if (reset) {
+        setMessagesLoading(true);
+      } else {
+        setLoadingOlderMessages(true);
+      }
+      
+      const data = await apiClient.getChatHistory(contactId, {
+        limit: MESSAGE_LIMIT,
+        offset: offset,
+      });
+      
+      const newMessages = Array.isArray(data) ? data : [];
+      
+      if (reset) {
+        setMessages(newMessages);
+      } else {
+        // Додаємо старі повідомлення на початок списку
+        setMessages((prev) => [...newMessages, ...prev]);
+      }
+      
+      // Перевіряємо чи є ще повідомлення
+      setHasMoreMessages(newMessages.length >= MESSAGE_LIMIT);
+      setMessageOffset(offset + newMessages.length);
     } catch (error) {
       console.error("Помилка завантаження повідомлень:", error);
-      setMessages([]);
+      if (reset) {
+        setMessages([]);
+      }
     } finally {
       setMessagesLoading(false);
+      setLoadingOlderMessages(false);
     }
+  };
+
+  const handleLoadOlderMessages = async () => {
+    if (!selectedContact || loadingOlderMessages || !hasMoreMessages) return;
+    await loadMessages(selectedContact.id, messageOffset, false);
   };
 
   const handleSearch = async () => {
@@ -362,15 +493,44 @@ const ContactsPage: React.FC = () => {
     text: string,
     replyToId?: string,
   ) => {
+    if (!selectedContact) return;
+
+    // Оптимістичне оновлення - додаємо повідомлення відразу
+    const optimisticMessage: MessageResponse = {
+      id: `temp-${Date.now()}`,
+      wamid: "",
+      direction: MessageDirection.OUTBOUND,
+      status: MessageStatus.PENDING,
+      message_type: "text",
+      body: text,
+      created_at: new Date().toISOString(),
+      media_files: [],
+      reply_to_message_id: replyToId,
+      reaction: null,
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+
     try {
-      await apiClient.sendMessage({
+      const response = await apiClient.sendMessage({
         phone,
         text,
         type: "text",
         reply_to_message_id: replyToId,
       });
+
+      // Видаляємо тимчасове повідомлення - WebSocket додасть реальне
+      if (response && response.message_id) {
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== optimisticMessage.id)
+        );
+      }
     } catch (error) {
       console.error("Помилка відправки повідомлення:", error);
+      // Видаляємо тимчасове повідомлення при помилці
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== optimisticMessage.id),
+      );
       alert("Не вдалося відправити повідомлення");
     }
   };
@@ -380,10 +540,47 @@ const ContactsPage: React.FC = () => {
     file: File,
     caption?: string,
   ) => {
+    if (!selectedContact) return;
+
+    const mediaType = file.type.startsWith("image/")
+      ? "image"
+      : file.type.startsWith("video/")
+        ? "video"
+        : file.type.startsWith("audio/")
+          ? "audio"
+          : "document";
+
+    // Оптимістичне оновлення для медіа
+    const optimisticMessage: MessageResponse = {
+      id: `temp-${Date.now()}`,
+      wamid: "",
+      direction: MessageDirection.OUTBOUND,
+      status: MessageStatus.PENDING,
+      message_type: mediaType,
+      body: caption || "",
+      created_at: new Date().toISOString(),
+      media_files: [],
+      reply_to_message_id: undefined,
+      reaction: null,
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+
     try {
-      await apiClient.sendMediaMessage(phone, file, caption);
+      const response = await apiClient.sendMediaMessage(phone, file, caption);
+
+      // Видаляємо тимчасове повідомлення - WebSocket додасть реальне
+      if (response && response.message_id) {
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== optimisticMessage.id)
+        );
+      }
     } catch (error) {
       console.error("Помилка відправки медіа:", error);
+      // Видаляємо тимчасове повідомлення при помилці
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== optimisticMessage.id),
+      );
       alert("Не вдалося відправити файл");
     }
   };
@@ -635,6 +832,10 @@ const ContactsPage: React.FC = () => {
               onCreateTag={handleCreateTag}
               onDeleteTag={handleDeleteTag}
               onEditTag={handleEditTag}
+              // Pagination Props
+              hasMoreMessages={hasMoreMessages}
+              loadingOlderMessages={loadingOlderMessages}
+              onLoadOlderMessages={handleLoadOlderMessages}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500">

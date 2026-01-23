@@ -109,7 +109,8 @@ class IncomingMessageHandler:
 
         target_msg.reaction = msg.reaction.emoji
         self.messages.add(target_msg)
-        logger.info(f"Updated reaction for msg {target_msg.id}: {msg.reaction.emoji}")
+        logger.info(
+            f"Updated reaction for msg {target_msg.id}: {msg.reaction.emoji}")
 
         await self.session.commit()
 
@@ -123,12 +124,21 @@ class IncomingMessageHandler:
         """Handles NATS publishing and WebSocket notifications."""
         if media_task:
             await broker.publish(media_task, subject="media.download")
-            logger.info(f"Queued media download for msg {media_task['message_id']}")
+            logger.info(
+                f"Queued media download for msg {media_task['message_id']}")
 
         await self.notifier.notify_new_message(
             new_msg,
             phone=contact.phone_number,
             media_files=[],
+        )
+
+        # Notify about contact session update (for 24h window tracking)
+        await self.notifier.notify_contact_session_update(
+            contact_id=contact.id,
+            phone=contact.phone_number,
+            last_message_at=contact.last_message_at or get_utc_now(),
+            last_incoming_message_at=contact.last_incoming_message_at,
         )
 
         preview_body = new_msg.body if new_msg.body else f"Sent {new_msg.message_type}"

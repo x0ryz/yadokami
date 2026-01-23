@@ -33,6 +33,7 @@ class EventType(str, Enum):
     CONTACT_UPDATED = "contact_updated"
     CONTACT_DELETED = "contact_deleted"
     CONTACT_UNREAD_CHANGED = "contact_unread_changed"
+    CONTACT_SESSION_UPDATE = "contact_session_update"
 
     # System events
     SYNC_STARTED = "sync_started"
@@ -53,7 +54,8 @@ class WSEvent(BaseModel):
 
     event: EventType
     data: dict[str, Any]
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -206,6 +208,29 @@ class ContactUnreadEvent(WSEvent):
                 "contact_id": str(contact_id),
                 "phone": phone,
                 "unread_count": unread_count,
+            },
+        )
+
+
+class ContactSessionUpdateEvent(WSEvent):
+    """Contact session time update (last_message_at)"""
+
+    def __init__(
+        self,
+        contact_id: UUID,
+        phone: str,
+        last_message_at: datetime,
+        last_incoming_message_at: datetime | None = None,
+    ):
+        super().__init__(
+            event=EventType.CONTACT_SESSION_UPDATE,
+            data={
+                "contact_id": str(contact_id),
+                "phone": phone,
+                "last_message_at": last_message_at.isoformat(),
+                "last_incoming_message_at": last_incoming_message_at.isoformat()
+                if last_incoming_message_at
+                else None,
             },
         )
 

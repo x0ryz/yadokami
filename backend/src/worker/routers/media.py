@@ -27,6 +27,7 @@ async def handle_media_download_task(
 ):
     storage_service = StorageService()
     message_repo = MessageRepository(session)
+    notifier = NotificationService()
 
     with logger.contextualize(message_id=task.message_id, media_id=task.meta_media_id):
         try:
@@ -53,7 +54,7 @@ async def handle_media_download_task(
                     content_type=task.mime_type,
                 )
 
-            await message_repo.add_media_file(
+            media_file = await message_repo.add_media_file(
                 message_id=uuid.UUID(task.message_id),
                 meta_media_id=task.meta_media_id,
                 file_name=filename,
@@ -66,6 +67,29 @@ async def handle_media_download_task(
             await session.commit()
 
             logger.info(f"Media saved successfully: {r2_key}")
+
+            # Отримуємо оновлене повідомлення з медіа файлами
+            message = await message_repo.get_by_id(uuid.UUID(task.message_id))
+            if message:
+                # Формуємо медіа файли для відправки
+                media_files = []
+                for mf in message.media_files:
+                    public_url = storage_service.get_public_url(mf.r2_key)
+                    media_files.append({
+                        "id": str(mf.id),
+                        "file_name": mf.file_name,
+                        "mime_type": mf.file_mime_type,
+                        "file_size": mf.file_size,
+                        "url": public_url,
+                        "caption": mf.caption,
+                    })
+
+                # Відправляємо подію про оновлення повідомлення
+                await notifier.notify_new_message(
+                    message,
+                    media_files=media_files,
+                    phone=message.contact.phone_number if message.contact else None,
+                )
 
         except Exception as e:
             logger.error(f"Failed to process media: {e}")
@@ -82,6 +106,7 @@ async def handle_media_send_task(
         storage = StorageService()
         notifier = NotificationService()
         sender = MessageSenderService(session, meta_client, notifier, storage)
+        message_repo = MessageRepository(session)
 
         try:
             if not os.path.exists(task.file_path):
@@ -91,7 +116,7 @@ async def handle_media_send_task(
             async with aiofiles.open(task.file_path, "rb") as f:
                 file_bytes = await f.read()
 
-            await sender.send_media_message(
+            message = await sender.send_media_message(
                 phone_number=task.phone_number,
                 file_bytes=file_bytes,
                 filename=task.filename,
@@ -99,6 +124,33 @@ async def handle_media_send_task(
                 caption=task.caption,
             )
             logger.info(f"Media sent to {task.phone_number}")
+
+            # Завантажуємо повідомлення з медіа файлами
+            message_with_media = await message_repo.get_by_id(message.id)
+
+            if message_with_media and message_with_media.media_files:
+                # Формуємо медіа файли для WebSocket
+                media_files = []
+                for mf in message_with_media.media_files:
+                    public_url = storage.get_public_url(mf.r2_key)
+                    media_files.append({
+                        "id": str(mf.id),
+                        "file_name": mf.file_name,
+                        "mime_type": mf.file_mime_type,
+                        "file_size": mf.file_size,
+                        "url": public_url,
+                        "caption": mf.caption,
+                    })
+
+                # Відправляємо подію про оновлення повідомлення з медіа
+                await notifier.notify_new_message(
+                    message_with_media,
+                    media_files=media_files,
+                    phone=message_with_media.contact.phone_number if message_with_media.contact else task.phone_number,
+                )
+                logger.info(
+                    f"Media files sent via WebSocket for message {message.id}")
+
         finally:
             if os.path.exists(task.file_path):
                 try:

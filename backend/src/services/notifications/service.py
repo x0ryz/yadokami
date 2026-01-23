@@ -8,6 +8,7 @@ from src.schemas.events import (
     BatchProgressEvent,
     CampaignProgressEvent,
     CampaignStatusEvent,
+    ContactSessionUpdateEvent,
     IncomingMessageEvent,
     MessageStatusEvent,
 )
@@ -61,6 +62,22 @@ class NotificationService:
         }
         await self._publish(event)
 
+    async def notify_contact_session_update(
+        self,
+        contact_id: UUID,
+        phone: str,
+        last_message_at,
+        last_incoming_message_at=None,
+    ):
+        """Notify about contact session time update (for 24h window tracking)"""
+        event = ContactSessionUpdateEvent(
+            contact_id=contact_id,
+            phone=phone,
+            last_message_at=last_message_at,
+            last_incoming_message_at=last_incoming_message_at,
+        )
+        await self._publish(event.to_dict())
+
     async def notify_message_status(
         self, message_id: UUID, wamid: str, status: str, **kwargs
     ):
@@ -74,7 +91,8 @@ class NotificationService:
         await self._publish(event.to_dict())
 
     async def notify_campaign_status(self, campaign_id: UUID, status: str, **kwargs):
-        event = CampaignStatusEvent(campaign_id=campaign_id, status=status, **kwargs)
+        event = CampaignStatusEvent(
+            campaign_id=campaign_id, status=status, **kwargs)
         await self._publish(event.to_dict())
 
     async def notify_batch_progress(

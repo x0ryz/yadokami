@@ -174,6 +174,11 @@ interface ChatWindowProps {
   onCreateTag: (tag: TagCreate) => Promise<void>;
   onDeleteTag: (tagId: string) => Promise<void>;
   onEditTag: (tagId: string, data: TagUpdate) => Promise<void>;
+  
+  // Пагінація
+  hasMoreMessages?: boolean;
+  loadingOlderMessages?: boolean;
+  onLoadOlderMessages?: () => void;
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -189,6 +194,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onCreateTag,
   onDeleteTag,
   onEditTag,
+  hasMoreMessages = false,
+  loadingOlderMessages = false,
+  onLoadOlderMessages,
 }) => {
   const [messageText, setMessageText] = useState("");
   const [replyTo, setReplyTo] = useState<MessageResponse | null>(null);
@@ -201,6 +209,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const shouldScrollRef = useRef(false);
+  const prevContactIdRef = useRef<string | null>(null);
+  const prevMessagesLengthRef = useRef(0);
+  const prevScrollHeightRef = useRef(0);
 
   // Перевірка чи сесія активна
   const isSessionExpired = React.useMemo(() => {
@@ -211,22 +224,65 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return Date.now() > end;
   }, [contact.last_incoming_message_at]);
 
+  // При зміні контакта - скролимо вниз
   useEffect(() => {
-    scrollToBottom("auto");
-    setSelectedFile(null);
-    setMessageText("");
-    setIsTagSelectorOpen(false);
-    setIsEditingName(false);
+    if (prevContactIdRef.current !== contact.id) {
+      shouldScrollRef.current = true;
+      scrollToBottom("auto");
+      setSelectedFile(null);
+      setMessageText("");
+      setIsTagSelectorOpen(false);
+      setIsEditingName(false);
+      prevContactIdRef.current = contact.id;
+      prevMessagesLengthRef.current = 0;
+    }
   }, [contact.id]);
 
+  // Скролимо тільки якщо встановлений прапорець або користувач вже внизу
   useEffect(() => {
-    scrollToBottom("smooth");
-  }, [messages, replyTo, selectedFile]);
+    const container = messagesContainerRef.current;
+    if (!container || messages.length === 0) return;
+
+    // Якщо завантажили старіші повідомлення (додались на початок)
+    const loadedOlder = messages.length > prevMessagesLengthRef.current && 
+                        !shouldScrollRef.current && 
+                        loadingOlderMessages === false;
+    
+    if (loadedOlder && prevScrollHeightRef.current > 0) {
+      // Зберігаємо позицію скролу після додавання старіших повідомлень
+      const newScrollHeight = container.scrollHeight;
+      const scrollDiff = newScrollHeight - prevScrollHeightRef.current;
+      container.scrollTop = scrollDiff;
+      prevScrollHeightRef.current = 0;
+    } else {
+      // Перевіряємо чи користувач вже внизу (з невеликою похибкою 100px)
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+      // Скролимо якщо:
+      // 1. Встановлений прапорець (зміна контакту або відправка)
+      // 2. Користувач вже знаходиться внизу чату
+      if (shouldScrollRef.current || isNearBottom) {
+        scrollToBottom("smooth");
+        shouldScrollRef.current = false;
+      }
+    }
+    
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, loadingOlderMessages]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior });
     }, 100);
+  };
+
+  const handleLoadOlder = () => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      prevScrollHeightRef.current = container.scrollHeight;
+    }
+    onLoadOlderMessages?.();
   };
 
   const handleSend = () => {
@@ -235,10 +291,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       setSelectedFile(null);
       setMessageText("");
       setReplyTo(null);
+      // Скролимо вниз після відправки
+      shouldScrollRef.current = true;
     } else if (messageText.trim()) {
       onSendMessage(contact.phone_number, messageText, replyTo?.id);
       setMessageText("");
       setReplyTo(null);
+      // Скролимо вниз після відправки
+      shouldScrollRef.current = true;
     }
   };
 
@@ -389,7 +449,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-2 relative"
+      >
         {loading ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             Завантаження...
@@ -399,7 +462,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             Немає повідомлень. Почніть спілкування.
           </div>
         ) : (
-          messages.map((message) => {
+          <>
+            {/* Кнопка завантаження старіших повідомлень */}
+            {hasMoreMessages && onLoadOlderMessages && (
+              <div className="flex justify-center mb-4">
+                <button
+                  onClick={handleLoadOlder}
+                  disabled={loadingOlderMessages}
+                  className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingOlderMessages ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      Завантаження...
+                    </span>
+                  ) : (
+                    "Завантажити старіші повідомлення"
+                  )}
+                </button>
+              </div>
+            )}
+            {messages.map((message) => {
             const isOutbound = message.direction === MessageDirection.OUTBOUND;
             const repliedMessage = getReplyingToMessage(
               message.reply_to_message_id,
@@ -448,7 +531,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     {/* Media Files */}
                     {message.media_files?.length > 0 && (
                       <div className="mb-2 grid gap-1">
-                        {message.media_files.map((media) => (
+                        {message.media_files?.map((media) => (
                           <div
                             key={media.id}
                             className="rounded overflow-hidden"
@@ -507,7 +590,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </div>
               </div>
             );
-          })
+          })}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>

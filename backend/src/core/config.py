@@ -19,10 +19,12 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY: str
     R2_SECRET_KEY: str
     R2_BUCKET_NAME: str
+    R2_PUBLIC_URL: str | None = None
 
     SENTRY_DSN: str | None = None
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8")
 
     @computed_field
     @property

@@ -60,7 +60,16 @@ class MessageRepository(BaseRepository[Message]):
         return parent_msg.id if parent_msg else None
 
     async def get_by_id(self, id: UUID) -> Message | None:
-        return await self.session.get(Message, id)
+        stmt = (
+            select(Message)
+            .where(Message.id == id)
+            .options(
+                selectinload(Message.media_files),
+                selectinload(Message.contact),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def update_status(self, wamid: str, status: MessageStatus) -> Message | None:
         message = await self.get_by_wamid(wamid)

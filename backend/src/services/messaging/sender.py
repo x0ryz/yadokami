@@ -171,9 +171,28 @@ class MessageSenderService:
             logger.info(
                 f"Media message sent to {phone_number}. WAMID: {wamid}")
 
+            # Завантажуємо повідомлення з медіа файлами
+            message_with_media = await self.messages.get_by_id(message.id)
+
+            # Формуємо медіа файли для WebSocket
+            media_files = []
+            if message_with_media and message_with_media.media_files:
+                for mf in message_with_media.media_files:
+                    public_url = self.storage.get_public_url(mf.r2_key)
+                    media_files.append({
+                        "id": str(mf.id),
+                        "file_name": mf.file_name,
+                        "mime_type": mf.file_mime_type,
+                        "file_size": mf.file_size,
+                        "url": public_url,
+                        "caption": mf.caption,
+                    })
+
             # Notify
             await self.notifier.notify_new_message(
-                message, phone=contact.phone_number
+                message_with_media or message,
+                media_files=media_files,
+                phone=contact.phone_number
             )
 
             await self.notifier.notify_message_status(
