@@ -59,6 +59,7 @@ class CampaignResponse(UUIDMixin, TimestampMixin):
     status: CampaignStatus
     message_type: str
     template_id: UUID | None = None
+    waba_phone_id: UUID | None = None
     message_body: str | None = None
     variable_mapping: dict[str, str] | None = None
     scheduled_at: datetime | None = None

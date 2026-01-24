@@ -142,6 +142,7 @@ export interface CampaignCreate {
   name: string;
   message_type?: MessageType;
   template_id?: string | null;
+  waba_phone_id?: string | null;
   message_body?: string | null;
   variable_mapping?: Record<string, string> | null;
 }
@@ -370,8 +371,6 @@ export interface WabaStatusResponse {
   accounts: WabaAccountStatus[];
   phone_numbers: WabaPhoneStatus[];
 }
-<<<<<<< HEAD
-=======
 
 export interface WabaPhoneNumberResponse {
   id: string;

@@ -163,71 +163,119 @@ export class ApiClient {
     return response.data;
   }
 
-  // Messages
-  async sendMessage(params: SendMessageParams): Promise<MessageSendResponse> {
-    const payload = {
-      phone_number: params.phone,
-      body: params.text || params.body,
-      type: params.type || "text",
-      template_id: params.template_id,
-      reply_to_message_id: params.reply_to_message_id,
-    };
-    const response = await this.client.post<MessageSendResponse>(
-      "/messages",
-      payload,
-    );
-    return response.data;
-  }
+async deleteContact(contactId: string): Promise<void> {
+  await this.client.delete(`/contacts/${contactId}`);
+}
 
-  async sendMediaMessage(
-    phone: string,
-    file: File,
-    caption?: string,
-  ): Promise<MessageSendResponse> {
-    const formData = new FormData();
-    formData.append("phone_number", phone);
-    formData.append("file", file);
-    if (caption) {
-      formData.append("caption", caption);
+  
+    async markContactAsRead(contactId: string): Promise<void> {
+      await this.client.post(`/contacts/${contactId}/read`);
+    }
+  
+    async getAvailableFields(): Promise<AvailableFieldsResponse> {
+      const response = await this.client.get<AvailableFieldsResponse>(
+        "/contacts/fields/available"
+      );
+      return response.data;
+    }
+  
+    async getChatHistory(
+      contactId: string,
+      params?: PaginationParams,
+    ): Promise<MessageResponse[]> {
+      const response = await this.client.get<MessageResponse[]>(
+        `/contacts/${contactId}/messages`,
+        { params },
+      );
+      return response.data;
+    }
+  
+    // Messages
+    async sendMessage(params: SendMessageParams): Promise<MessageSendResponse> {
+      const payload = {
+        phone_number: params.phone,
+        body: params.text || params.body,
+        type: params.type || "text",
+        template_id: params.template_id,
+        reply_to_message_id: params.reply_to_message_id,
+      };
+      const response = await this.client.post<MessageSendResponse>(
+        "/messages",
+        payload,
+      );
+      return response.data;
+    }
+  
+    async sendMediaMessage(
+      phone: string,
+      file: File,
+      caption?: string,
+    ): Promise<MessageSendResponse> {
+      const formData = new FormData();
+      formData.append("phone_number", phone);
+      formData.append("file", file);
+      if (caption) {
+        formData.append("caption", caption);
+      }
+  
+      const response = await this.client.post<MessageSendResponse>(
+        "/messages/media",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
+      );
+      return response.data;
+    }
+  
+    // Tags
+    async getTags(): Promise<Tag[]> {
+      const response = await this.client.get<Tag[]>("/tags");
+      return response.data;
+    }
+  
+    async createTag(data: TagCreate): Promise<Tag> {
+      const response = await this.client.post<Tag>("/tags", data);
+      return response.data;
+    }
+  
+    async deleteTag(tagId: string): Promise<void> {
+      await this.client.delete(`/tags/${tagId}`);
+    }
+  
+    async updateTag(tagId: string, data: TagUpdate): Promise<Tag> {
+      const response = await this.client.patch<Tag>(`/tags/${tagId}`, data);
+      return response.data;
+    }
+  
+    // WABA
+    async triggerWabaSync(): Promise<any> {
+      const response = await this.client.post("/waba/sync");
+      return response.data;
+    }
+  
+    async getWabaPhoneNumbers(): Promise<WabaPhoneNumbersResponse> {
+      const response = await this.client.get<WabaPhoneNumbersResponse>(
+        "/waba/phone-numbers"
+      );
+      return response.data;
+    }
+    
+    async getWabaStatus(): Promise<WabaStatusResponse> {
+      const response = await this.client.get<WabaStatusResponse>(
+        "/dashboard/waba-status",
+      );
+      return response.data;
     }
 
-    const response = await this.client.post<MessageSendResponse>(
-      "/messages/media",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      },
-    );
-    return response.data;
-  }
-
-  // Tags
-  async getTags(): Promise<Tag[]> {
-    const response = await this.client.get<Tag[]>("/tags");
-    return response.data;
-  }
-
-  async createTag(data: TagCreate): Promise<Tag> {
-    const response = await this.client.post<Tag>("/tags", data);
-    return response.data;
-  }
-
-  async deleteTag(tagId: string): Promise<void> {
-    await this.client.delete(`/tags/${tagId}`);
-  }
-
-  async updateTag(tagId: string, data: TagUpdate): Promise<Tag> {
-    const response = await this.client.patch<Tag>(`/tags/${tagId}`, data);
-    return response.data;
-  }
-
-  // WABA
-  async triggerWabaSync(): Promise<any> {
-    const response = await this.client.post("/waba/sync");
-    return response.data;
-  }
+    async getWabaSettings(): Promise<WabaSettingsResponse> {
+      const response = await this.client.get<WabaSettingsResponse>(
+        "/waba/settings",
+      );
+      return response.data;
+    }
 
   async getWabaPhoneNumbers(): Promise<WabaPhoneNumbersResponse> {
     const response = await this.client.get<WabaPhoneNumbersResponse>(

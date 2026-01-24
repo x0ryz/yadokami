@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from src.models.contacts import Contact
     from src.models.messages import Message
     from src.models.templates import Template
+    from src.models.waba import WabaPhoneNumber
 
 
 class Campaign(Base, UUIDMixin, TimestampMixin):
@@ -31,6 +32,9 @@ class Campaign(Base, UUIDMixin, TimestampMixin):
     message_type: Mapped[str] = mapped_column(default="template")
     template_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("templates.id"), nullable=True
+    )
+    waba_phone_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("waba_phone_numbers.id"), nullable=True
     )
     message_body: Mapped[str | None] = mapped_column(String, nullable=True)
     variable_mapping: Mapped[dict | None] = mapped_column(JSON, nullable=True)
