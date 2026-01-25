@@ -134,6 +134,18 @@ class NotificationService:
             "timestamp": get_utc_now().isoformat(),
         }
         await self._publish(event)
+        
+        # Notify Telegram Admin Group
+        from src.clients.telegram import telegram_client
+        from src.core.config import settings
+        if settings.TG_ADMIN_GROUP_ID:
+            msg = (
+                f"📝 <b>Template Update</b>\n"
+                f"Name: {name}\n"
+                f"Status: {status}\n"
+                f"Reason: {reason or 'N/A'}"
+            )
+            await telegram_client.send_message(settings.TG_ADMIN_GROUP_ID, msg)
 
     async def notify_waba_update(self, waba_id: str, status: str, event_type: str):
         event = {
@@ -146,6 +158,18 @@ class NotificationService:
             "timestamp": get_utc_now().isoformat(),
         }
         await self._publish(event)
+
+        # Notify Telegram Admin Group
+        from src.clients.telegram import telegram_client
+        from src.core.config import settings
+        if settings.TG_ADMIN_GROUP_ID:
+            msg = (
+                f"🏢 <b>WABA Account Update</b>\n"
+                f"Type: {event_type}\n"
+                f"Status: {status}\n"
+                f"WABA ID: {waba_id}"
+            )
+            await telegram_client.send_message(settings.TG_ADMIN_GROUP_ID, msg)
 
     async def notify_phone_update(
         self, phone_number: str, event: str, current_limit: str
@@ -160,3 +184,15 @@ class NotificationService:
             "timestamp": get_utc_now().isoformat(),
         }
         await self._publish(event)
+
+        # Notify Telegram Admin Group
+        from src.clients.telegram import telegram_client
+        from src.core.config import settings
+        if settings.TG_ADMIN_GROUP_ID:
+            msg = (
+                f"📱 <b>Phone Number Update</b>\n"
+                f"Phone: {phone_number}\n"
+                f"Event: {event}\n"
+                f"Limit Tier: {current_limit}"
+            )
+            await telegram_client.send_message(settings.TG_ADMIN_GROUP_ID, msg)

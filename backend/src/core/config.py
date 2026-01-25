@@ -24,11 +24,13 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_WORKER_DSN: str | None = None
 
-    # Campaign settings
-    MAX_CAMPAIGN_RETRIES: int = 2  # Maximum retry attempts per contact
+    TG_BOT_TOKEN: str
+    TG_DEV_ID: int
+    TG_ADMIN_GROUP_ID: int
 
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8")
+    MAX_CAMPAIGN_RETRIES: int = 2
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @computed_field
     @property
