@@ -29,6 +29,7 @@ import {
   Lock,
   Zap,
   Languages,
+  Calendar,
 } from "lucide-react";
 
 // --- КОМПОНЕНТ ТАЙМЕРА З КІЛЬЦЕМ ТА HOVER-ЕФЕКТОМ ---
@@ -171,7 +172,7 @@ interface ChatWindowProps {
   contact: Contact;
   messages: MessageResponse[];
   loading: boolean;
-  onSendMessage: (phone: string, text: string, replyToId?: string) => void;
+  onSendMessage: (phone: string, text: string, replyToId?: string, scheduledAt?: string) => void;
   onSendMedia: (phone: string, file: File, caption?: string) => void;
 
   onContactUpdate?: (contact: Contact) => void;
@@ -211,6 +212,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isTagSelectorOpen, setIsTagSelectorOpen] = useState(false);
   const [isQuickReplyPickerOpen, setIsQuickReplyPickerOpen] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduledMessageMenu, setScheduledMessageMenu] = useState<{
+    messageId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Визначаємо мову: спочатку з custom_data, потім автовизначення, потім дефолт
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
@@ -317,6 +325,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       setSelectedFile(null);
       setMessageText("");
       setReplyTo(null);
+      setScheduledAt(null);
+      setShowSchedulePicker(false);
       // Скролимо вниз після відправки
       shouldScrollRef.current = true;
       // Скидаємо висоту textarea
@@ -324,9 +334,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         textareaRef.current.style.height = "40px";
       }
     } else if (messageText.trim()) {
-      onSendMessage(contact.phone_number, messageText, replyTo?.id);
+      onSendMessage(contact.phone_number, messageText, replyTo?.id, scheduledAt || undefined);
       setMessageText("");
       setReplyTo(null);
+      setScheduledAt(null);
+      setShowSchedulePicker(false);
       // Скролимо вниз після відправки
       shouldScrollRef.current = true;
       // Скидаємо висоту textarea
@@ -403,6 +415,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
       }
     }, 0);
+  };
+
+  const handleSendScheduledNow = async (messageId: string) => {
+    try {
+      await apiClient.sendScheduledMessageNow(messageId);
+      setScheduledMessageMenu(null);
+    } catch (error) {
+      console.error("Failed to send scheduled message:", error);
+      alert("Не вдалося відправити повідомлення");
+    }
+  };
+
+  const handleDeleteScheduledMessage = async (messageId: string) => {
+    try {
+      await apiClient.deleteScheduledMessage(messageId);
+      setScheduledMessageMenu(null);
+      // Message will be removed via WebSocket update
+    } catch (error) {
+      console.error("Failed to delete scheduled message:", error);
+      alert("Не вдалося видалити повідомлення");
+    }
   };
 
   return (
@@ -612,14 +645,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                       )}
                     </div>
 
+
+
                     <div className="flex items-center justify-end gap-1 mt-1 select-none">
                       <span className="text-[10px] text-gray-500">
-                        {formatMessageTime(message.created_at)}
+                        {formatMessageTime(message.sent_at || message.scheduled_at || message.created_at)}
                       </span>
                       {isOutbound && (
                         <span
-                          className={`text-[10px] ${getStatusClass(message.status)} cursor-help`}
-                          title={message.status === MessageStatus.FAILED && message.error_message ? `Помилка: ${message.error_message}` : ''}
+                          onClick={(e) => {
+                            if (message.scheduled_at) {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setScheduledMessageMenu({
+                                messageId: message.id,
+                                x: rect.left,
+                                y: rect.bottom + 5,
+                              });
+                            }
+                          }}
+                          className={`text-[10px] ${getStatusClass(message.status)} ${message.scheduled_at ? "cursor-pointer" : "cursor-help"} flex items-center justify-center`}
+                          title={
+                            message.scheduled_at
+                              ? `Статус: ${message.status}\nЗаплановано на: ${new Date(message.scheduled_at).toLocaleString('uk-UA')}`
+                              : ''
+                          }
                         >
                           {getStatusIcon(message.status)}
                         </span>
@@ -764,6 +814,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             style={{ minHeight: "40px" }}
             disabled={isSessionExpired} // Блокування тексту
           />
+
+          {/* Schedule Button */}
+          <button
+            onClick={() => setShowSchedulePicker(!showSchedulePicker)}
+            className={`p-2 hover:bg-gray-100 rounded-full transition-colors w-10 h-10 flex items-center justify-center ${isSessionExpired ? "opacity-50 cursor-not-allowed" : ""} ${scheduledAt ? "text-orange-500" : "text-gray-500 hover:text-gray-700"}`}
+            title={scheduledAt ? `Заплановано на ${new Date(scheduledAt).toLocaleString('uk-UA')}` : "Запланувати відправку"}
+            disabled={isSessionExpired}
+          >
+            <Calendar className="w-5 h-5" />
+          </button>
+
           <button
             onClick={handleSend}
             disabled={
@@ -778,7 +839,199 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             )}
           </button>
         </div>
+
+        {/* Schedule Picker Modal */}
+        {showSchedulePicker && (
+          <div className="absolute bottom-16 right-4 bg-white rounded-lg shadow-2xl border border-gray-200 p-4 z-50 min-w-[300px]">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold text-gray-800">Запланувати відправку</h3>
+              <button
+                onClick={() => setShowSchedulePicker(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Session Based Scheduling */}
+              {contact.last_incoming_message_at && (() => {
+                const lastMsgTime = new Date(contact.last_incoming_message_at).getTime();
+                const sessionEnd = lastMsgTime + 24 * 60 * 60 * 1000;
+                const now = Date.now();
+
+                if (sessionEnd <= now) return null; // Session expired
+
+                const timeLeftMs = sessionEnd - now;
+                const timeLeftHours = timeLeftMs / (1000 * 60 * 60);
+
+                const setRelativeTime = (minutesBeforeEnd: number) => {
+                  const targetTime = new Date(sessionEnd - minutesBeforeEnd * 60 * 1000);
+                  if (targetTime.getTime() > now) {
+                    setScheduledAt(targetTime.toISOString());
+                  }
+                };
+
+                return (
+                  <div className="mb-3 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="text-xs font-medium text-blue-800 mb-2 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      До кінця сесії: {Math.floor(timeLeftHours)}г {Math.floor((timeLeftMs % (3600000)) / 60000)}хв
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {timeLeftMs > 15 * 60000 && (
+                        <button
+                          onClick={() => setRelativeTime(15)}
+                          className="text-xs bg-white border border-blue-200 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          За 15 хв до кінця
+                        </button>
+                      )}
+                      {timeLeftMs > 60 * 60000 && (
+                        <button
+                          onClick={() => setRelativeTime(60)}
+                          className="text-xs bg-white border border-blue-200 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          За 1 год до кінця
+                        </button>
+                      )}
+                      {timeLeftMs > 120 * 60000 && (
+                        <button
+                          onClick={() => setRelativeTime(120)}
+                          className="text-xs bg-white border border-blue-200 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          За 2 год до кінця
+                        </button>
+                      )}
+                      {timeLeftMs > 180 * 60000 && (
+                        <button
+                          onClick={() => setRelativeTime(180)}
+                          className="text-xs bg-white border border-blue-200 text-blue-700 px-2 py-1.5 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          За 3 год до кінця
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Дата і час</label>
+                <input
+                  type="datetime-local"
+                  value={(() => {
+                    if (!scheduledAt) return '';
+                    const date = new Date(scheduledAt);
+                    const offsetMs = date.getTimezoneOffset() * 60000;
+                    const localDate = new Date(date.getTime() - offsetMs);
+                    return localDate.toISOString().slice(0, 16);
+                  })()}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setScheduledAt(new Date(e.target.value).toISOString());
+                    } else {
+                      setScheduledAt(null);
+                    }
+                  }}
+                  min={(() => {
+                    const date = new Date();
+                    const offsetMs = date.getTimezoneOffset() * 60000;
+                    const localDate = new Date(date.getTime() - offsetMs);
+                    return localDate.toISOString().slice(0, 16);
+                  })()}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {scheduledAt && (
+                <div className="text-xs text-gray-500 bg-orange-50 border border-orange-200 rounded p-2">
+                  📅 Буде відправлено: {new Date(scheduledAt).toLocaleString('uk-UA')}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {scheduledAt && (
+                  <button
+                    onClick={() => {
+                      setScheduledAt(null);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Скасувати
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowSchedulePicker(false);
+                  }}
+                  disabled={!scheduledAt}
+                  className="flex-1 px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Готово
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Scheduled Message Context Menu */}
+      {/* Scheduled Message Context Menu */}
+      {
+        scheduledMessageMenu &&
+        (() => {
+          const msg = messages.find(
+            (m) => m.id === scheduledMessageMenu.messageId
+          );
+          if (!msg) return null;
+
+          return (
+            <>
+              <div
+                className="fixed inset-0 z-[100]"
+                onClick={() => setScheduledMessageMenu(null)}
+              />
+              <div
+                className="fixed z-[101] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 min-w-[180px]"
+                style={{
+                  left: `${scheduledMessageMenu.x}px`,
+                  top: `${scheduledMessageMenu.y}px`,
+                }}
+              >
+                {msg.status === MessageStatus.PENDING ? (
+                  <>
+                    <button
+                      onClick={() =>
+                        handleSendScheduledNow(scheduledMessageMenu.messageId)
+                      }
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 text-blue-600 font-medium flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      Відправити зараз
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleDeleteScheduledMessage(
+                          scheduledMessageMenu.messageId
+                        )
+                      }
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 text-red-600 font-medium flex items-center gap-2"
+                    >
+                      <X className="w-4 h-4" />
+                      Видалити
+                    </button>
+                  </>
+                ) : (
+                  <div className="px-4 py-2 text-sm text-gray-500 text-center">
+                    Status: {msg.status}
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()
+      }
 
       {/* Quick Reply Picker */}
       <QuickReplyPicker
@@ -788,7 +1041,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         language={selectedLanguage}
         buttonRef={quickReplyButtonRef}
       />
-    </div>
+    </div >
   );
 };
 

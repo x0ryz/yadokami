@@ -67,6 +67,15 @@ class Message(Base, UUIDMixin, TimestampMixin):
         ForeignKey("messages.id"), nullable=True
     )
     reaction: Mapped[str | None] = mapped_column(String, nullable=True)
+    
+    # Scheduled message support
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     template_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("templates.id"), nullable=True

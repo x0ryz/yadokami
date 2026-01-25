@@ -45,6 +45,8 @@ class NotificationService:
             status=message.status,
             reply_to_message_id=message.reply_to_message_id,
             reaction=message.reaction,
+            scheduled_at=message.scheduled_at,
+            sent_at=message.sent_at,
         )
         await self._publish(event.to_dict())
 

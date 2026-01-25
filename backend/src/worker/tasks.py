@@ -1,7 +1,9 @@
 import asyncio
 
+from sqlalchemy import select
+
 from src.core.database import async_session_maker
-from src.models import CampaignStatus, get_utc_now
+from src.models import CampaignStatus, Message, MessageStatus, get_utc_now
 from src.repositories.campaign import CampaignRepository
 from src.services.campaign.lifecycle import CampaignLifecycleManager
 from src.services.notifications.service import NotificationService
@@ -60,3 +62,49 @@ async def scheduled_campaigns_checker(broker):
             break
         except Exception as e:
             logger.error(f"Error in scheduled campaigns checker: {e}")
+
+
+async def scheduled_messages_checker(broker):
+    """
+    Background task that checks for scheduled messages periodically.
+    Replaces the standalone scheduler.py service.
+    """
+    logger.info("Scheduled messages checker started")
+    while True:
+        try:
+            # Check every 10 seconds
+            await asyncio.sleep(10)
+            
+            async with async_session_maker() as session:
+                now = get_utc_now()
+                
+                # Find messages that are scheduled and due to be sent
+                stmt = (
+                    select(Message.id)
+                    .where(
+                        Message.scheduled_at.isnot(None),
+                        Message.scheduled_at <= now,
+                        Message.status == MessageStatus.PENDING,
+                    )
+                    .limit(100)  # Process in batches
+                )
+                
+                result = await session.execute(stmt)
+                message_ids = result.scalars().all()
+                
+                if message_ids:
+                    logger.info(f"Found {len(message_ids)} scheduled messages ready to send")
+                    
+                    for message_id in message_ids:
+                        # Publish event for each message
+                        # We use 'messages.send_scheduled_item' subject
+                        await broker.publish(
+                            {"message_id": str(message_id)},
+                            subject="messages.send_scheduled_item",
+                        )
+
+        except asyncio.CancelledError:
+            logger.info("Scheduled messages checker stopped")
+            break
+        except Exception as e:
+            logger.error(f"Error in scheduled messages checker: {e}")

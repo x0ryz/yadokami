@@ -205,6 +205,8 @@ export interface MessageResponse {
   message_type: string;
   body: string | null;
   created_at: string | null;
+  scheduled_at?: string | null;
+  sent_at?: string | null;
   media_files: MediaFileResponse[];
   reply_to_message_id?: string | null;
   reaction?: string | null;
@@ -340,6 +342,7 @@ export interface SendMessageParams {
   body?: string;
   template_id?: string;
   reply_to_message_id?: string;
+  scheduled_at?: string;
 }
 
 export interface WebhookVerifyParams {

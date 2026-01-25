@@ -93,6 +93,8 @@ class ChatService:
                 message_type=msg.message_type,
                 body=msg.body,
                 created_at=msg.created_at,
+                scheduled_at=msg.scheduled_at,
+                sent_at=msg.sent_at,
                 media_files=media_dtos,
                 reply_to_message_id=msg.reply_to_message_id,
                 reaction=msg.reaction,

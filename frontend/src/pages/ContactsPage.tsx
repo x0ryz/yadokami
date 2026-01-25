@@ -123,14 +123,14 @@ const ContactsPage: React.FC = () => {
 
         setMessages((prev) => {
           if (!Array.isArray(prev)) return [data];
-          
+
           // Перевіряємо чи повідомлення вже існує
           const existingIndex = prev.findIndex(
-            (m) => 
-              (data.id && m.id === data.id) || 
+            (m) =>
+              (data.id && m.id === data.id) ||
               (data.wamid && m.wamid && m.wamid === data.wamid)
           );
-          
+
           // Якщо повідомлення існує і прийшли медіа файли - оновлюємо його
           if (existingIndex !== -1 && data.media_files && data.media_files.length > 0) {
             console.log("WS: Updating message with media:", {
@@ -146,13 +146,13 @@ const ContactsPage: React.FC = () => {
             };
             return updated;
           }
-          
+
           // Якщо повідомлення вже є - не додаємо дублікат
           if (existingIndex !== -1) {
             console.log("WS: Message already exists, skipping duplicate:", data.id);
             return prev;
           }
-          
+
           // Перевіряємо чи це оновлення для тимчасового повідомлення
           const tempMsgIndex = prev.findIndex(
             (m) => m.id && m.id.startsWith("temp-") && (!m.wamid || m.wamid === "")
@@ -169,6 +169,7 @@ const ContactsPage: React.FC = () => {
             media_files: data.media_files || [],
             reply_to_message_id: data.reply_to_message_id,
             reaction: data.reaction,
+            scheduled_at: data.scheduled_at,
           };
 
           // Якщо це OUTBOUND і є тимчасове повідомлення, замінюємо його
@@ -249,6 +250,7 @@ const ContactsPage: React.FC = () => {
             ...msg,
             status: newStatus,
             wamid: data.wamid || msg.wamid,
+            sent_at: data.sent_at || msg.sent_at,
           };
         }
         return msg;
@@ -361,9 +363,9 @@ const ContactsPage: React.FC = () => {
       setSelectedContact((prev) =>
         prev
           ? {
-              ...prev,
-              tags: data.tags || [],
-            }
+            ...prev,
+            tags: data.tags || [],
+          }
           : prev
       );
     }
@@ -388,16 +390,16 @@ const ContactsPage: React.FC = () => {
       if (
         updatedContact &&
         updatedContact.last_incoming_message_at !==
-          selectedContact.last_incoming_message_at
+        selectedContact.last_incoming_message_at
       ) {
         setSelectedContact((prev) =>
           prev
             ? {
-                ...prev,
-                last_incoming_message_at:
-                  updatedContact.last_incoming_message_at,
-                last_message_at: updatedContact.last_message_at,
-              }
+              ...prev,
+              last_incoming_message_at:
+                updatedContact.last_incoming_message_at,
+              last_message_at: updatedContact.last_message_at,
+            }
             : prev,
         );
       }
@@ -472,21 +474,21 @@ const ContactsPage: React.FC = () => {
       } else {
         setLoadingOlderMessages(true);
       }
-      
+
       const data = await apiClient.getChatHistory(contactId, {
         limit: MESSAGE_LIMIT,
         offset: offset,
       });
-      
+
       const newMessages = Array.isArray(data) ? data : [];
-      
+
       if (reset) {
         setMessages(newMessages);
       } else {
         // Додаємо старі повідомлення на початок списку
         setMessages((prev) => [...newMessages, ...prev]);
       }
-      
+
       // Перевіряємо чи є ще повідомлення
       setHasMoreMessages(newMessages.length >= MESSAGE_LIMIT);
       setMessageOffset(offset + newMessages.length);
@@ -527,6 +529,7 @@ const ContactsPage: React.FC = () => {
     phone: string,
     text: string,
     replyToId?: string,
+    scheduledAt?: string,
   ) => {
     if (!selectedContact) return;
 
@@ -539,6 +542,7 @@ const ContactsPage: React.FC = () => {
       message_type: "text",
       body: text,
       created_at: new Date().toISOString(),
+      scheduled_at: scheduledAt,
       media_files: [],
       reply_to_message_id: replyToId,
       reaction: null,
@@ -552,6 +556,7 @@ const ContactsPage: React.FC = () => {
         text,
         type: "text",
         reply_to_message_id: replyToId,
+        scheduled_at: scheduledAt,
       });
 
       // Видаляємо тимчасове повідомлення - WebSocket додасть реальне
@@ -792,8 +797,8 @@ const ContactsPage: React.FC = () => {
           <button
             onClick={() => setShowArchived(!showArchived)}
             className={`p-2 rounded-lg border transition-colors ${showArchived
-                ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
-                : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+              ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+              : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
               }`}
             title={
               showArchived

@@ -45,13 +45,45 @@ async def send_message(data: MessageCreate):
 
     - **text**: Send regular text message
     - **template**: Send template message (template_id required)
+    - **scheduled_at**: Optional ISO 8601 datetime to schedule message for future delivery
     """
+    from src.models.base import get_utc_now
     request_id = str(uuid.uuid4())
 
     message_body = data.body
     if data.type == "template" and data.template_id:
         message_body = str(data.template_id)
 
+    # Check if message is scheduled for future
+    if data.scheduled_at:
+        now = get_utc_now()
+        if data.scheduled_at <= now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scheduled time must be in the future"
+            )
+        
+        # For scheduled messages, we'll save them directly to DB
+        # instead of publishing to NATS immediately
+        # A background scheduler will handle sending them at the right time
+        await broker.publish(
+            {
+                "phone_number": data.phone_number,
+                "type": data.type,
+                "body": message_body,
+                "reply_to_message_id": str(data.reply_to_message_id) if data.reply_to_message_id else None,
+                "phone_id": str(data.phone_id) if data.phone_id else None,
+                "scheduled_at": data.scheduled_at.isoformat(),
+                "request_id": request_id,
+            },
+            subject="messages.schedule",
+        )
+        
+        return MessageSendResponse(
+            status="scheduled", message_id=uuid.uuid4(), request_id=request_id
+        )
+
+    # For immediate messages, use existing flow
     message_obj = WhatsAppMessage(
         phone_number=data.phone_number,
         type=data.type,
@@ -167,3 +199,29 @@ async def send_media_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process file upload",
         )
+
+
+@router.post(
+    "/messages/{message_id}/send-now",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def send_scheduled_message_now(message_id: str):
+    """Send a scheduled message immediately."""
+    await broker.publish(
+        {"message_id": message_id},
+        subject="messages.send_scheduled_now",
+    )
+    return {"status": "processing"}
+
+
+@router.delete(
+    "/messages/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_scheduled_message(message_id: str):
+    """Delete a scheduled message."""
+    await broker.publish(
+        {"message_id": message_id},
+        subject="messages.delete_scheduled",
+    )
+    return None

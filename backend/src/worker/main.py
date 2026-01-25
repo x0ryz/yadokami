@@ -11,7 +11,7 @@ from src.worker.routers.campaigns import router as campaigns_router
 from src.worker.routers.media import router as media_router
 from src.worker.routers.messages import router as messages_router
 from src.worker.routers.system import router as system_router
-from src.worker.tasks import scheduled_campaigns_checker
+from src.worker.tasks import scheduled_campaigns_checker, scheduled_messages_checker
 
 app = FastStream(broker)
 
@@ -20,7 +20,8 @@ broker.include_router(messages_router)
 broker.include_router(media_router)
 broker.include_router(system_router)
 
-scheduler_task: asyncio.Task | None = None
+campaign_scheduler_task: asyncio.Task | None = None
+message_scheduler_task: asyncio.Task | None = None
 
 if settings.SENTRY_WORKER_DSN:
     sentry_sdk.init(
@@ -31,7 +32,7 @@ if settings.SENTRY_WORKER_DSN:
 
 @app.on_startup
 async def startup_handler(context: ContextRepo):
-    global scheduler_task
+    global campaign_scheduler_task, message_scheduler_task
     logger.info("FastStream Worker: Starting up...")
 
     http_client = httpx.AsyncClient(
@@ -42,19 +43,30 @@ async def startup_handler(context: ContextRepo):
 
     await setup_jetstream()
 
-    scheduler_task = asyncio.create_task(scheduled_campaigns_checker(broker))
+    campaign_scheduler_task = asyncio.create_task(
+        scheduled_campaigns_checker(broker))
+    message_scheduler_task = asyncio.create_task(
+        scheduled_messages_checker(broker))
     logger.info("Startup complete.")
 
 
 @app.on_shutdown
 async def shutdown_handler(context: ContextRepo):
-    global scheduler_task
+    global campaign_scheduler_task, message_scheduler_task
     logger.info("FastStream Worker: Shutting down...")
 
-    if scheduler_task:
-        scheduler_task.cancel()
+    tasks = []
+    if campaign_scheduler_task:
+        tasks.append(campaign_scheduler_task)
+    if message_scheduler_task:
+        tasks.append(message_scheduler_task)
+
+    for task in tasks:
+        task.cancel()
+
+    if tasks:
         try:
-            await scheduler_task
+            await asyncio.gather(*tasks, return_exceptions=True)
         except asyncio.CancelledError:
             pass
 
@@ -62,3 +74,4 @@ async def shutdown_handler(context: ContextRepo):
     if http_client:
         await http_client.aclose()
     logger.info("Shutdown complete.")
+

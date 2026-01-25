@@ -1,5 +1,7 @@
 import mimetypes
 import uuid
+from datetime import datetime
+from src.models.base import get_utc_now
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,6 +75,68 @@ class MessageSenderService:
         )
 
         await self.session.commit()
+
+    async def create_scheduled_message(
+        self,
+        phone_number: str,
+        message_type: str,
+        body: str,
+        scheduled_at: datetime,
+        reply_to_message_id: uuid.UUID | None = None,
+        phone_id: str | None = None,
+    ):
+        """Create a scheduled message in the database."""
+        contact = await self.contacts.get_or_create(phone_number)
+
+        # Get WABA phone
+        waba_phone = None
+        if phone_id:
+            waba_phone = await self.waba_phones.get_by_id(uuid.UUID(phone_id))
+        else:
+            waba_phone = await self._get_preferred_phone(contact)
+
+        if not waba_phone:
+            raise ValueError("No WABA Phone numbers found in DB.")
+
+        template_id = None
+        template_name = None
+        if message_type == "template":
+            from src.repositories.template import TemplateRepository
+
+            template_repo = TemplateRepository(self.session)
+            template = await template_repo.get_active_by_id(body)
+            if template:
+                template_id = template.id
+                template_name = template.name
+                body = template_name
+            else:
+                logger.error(f"Template {body} not found")
+                raise ValueError(f"Template {body} not found")
+
+        # Create message entity with scheduled_at
+        message = await self.messages.create(
+            waba_phone_id=waba_phone.id,
+            contact_id=contact.id,
+            direction=MessageDirection.OUTBOUND,
+            status=MessageStatus.PENDING,
+            message_type=message_type,
+            body=body,
+            template_id=template_id,
+            reply_to_message_id=reply_to_message_id,
+            scheduled_at=scheduled_at,
+        )
+
+        await self.session.commit()
+        await self.session.refresh(message)
+
+        logger.info(
+            f"Created scheduled message {message.id} for {phone_number} at {scheduled_at}"
+        )
+
+        # Notify about scheduled message
+        await self.notifier.notify_new_message(message, phone=contact.phone_number)
+
+        return message
 
     # Supported MIME types by WhatsApp Business API
     SUPPORTED_MIME_TYPES = {
@@ -218,6 +282,7 @@ class MessageSenderService:
             # Update message with WAMID
             message.wamid = wamid
             message.status = MessageStatus.SENT
+            message.sent_at = get_utc_now()
             self.session.add(message)
 
             await self.session.commit()
@@ -257,6 +322,7 @@ class MessageSenderService:
                 wamid=wamid,
                 status="sent",
                 phone=contact.phone_number,
+                sent_at=message.sent_at.isoformat() if message.sent_at else None,
             )
 
             return message
@@ -363,6 +429,7 @@ class MessageSenderService:
         is_campaign: bool = False,
         reply_to_message_id: uuid.UUID | None = None,
         phone_id: str | None = None,
+        existing_message: Message | None = None,
     ) -> Message:
         """
         Send message to a contact.
@@ -387,17 +454,23 @@ class MessageSenderService:
                 logger.warning(
                     f"Reply target message {reply_to_message_id} not found")
 
-        # Create message entity
-        message = await self.messages.create(
-            waba_phone_id=waba_phone.id,
-            contact_id=contact.id,
-            direction=MessageDirection.OUTBOUND,
-            status=MessageStatus.PENDING,
-            message_type=message_type,
-            body=body if message_type == "text" else template_name,
-            template_id=template_id,
-            reply_to_message_id=reply_to_message_id,
-        )
+        # Use existing message or create new one
+        if existing_message:
+            message = existing_message
+            # Ensure critical fields are set/updated if needed
+            if not message.waba_phone_id:
+                message.waba_phone_id = waba_phone.id
+        else:
+            message = await self.messages.create(
+                waba_phone_id=waba_phone.id,
+                contact_id=contact.id,
+                direction=MessageDirection.OUTBOUND,
+                status=MessageStatus.PENDING,
+                message_type=message_type,
+                body=body if message_type == "text" else template_name,
+                template_id=template_id,
+                reply_to_message_id=reply_to_message_id,
+            )
 
         await self.session.flush()
         await self.session.refresh(message)
@@ -461,6 +534,7 @@ class MessageSenderService:
             # Update message with WAMID
             message.wamid = wamid
             message.status = MessageStatus.SENT
+            message.sent_at = get_utc_now()
             self.session.add(message)
 
             logger.info(
@@ -472,6 +546,7 @@ class MessageSenderService:
                     wamid=wamid,
                     status="sent",
                     phone=contact.phone_number,
+                    sent_at=message.sent_at.isoformat() if message.sent_at else None,
                 )
 
             return message

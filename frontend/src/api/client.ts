@@ -171,6 +171,7 @@ export class ApiClient {
       type: params.type || "text",
       template_id: params.template_id,
       reply_to_message_id: params.reply_to_message_id,
+      scheduled_at: params.scheduled_at,
     };
     const response = await this.client.post<MessageSendResponse>(
       "/messages",
@@ -201,6 +202,14 @@ export class ApiClient {
       },
     );
     return response.data;
+  }
+
+  async sendScheduledMessageNow(messageId: string): Promise<void> {
+    await this.client.post(`/messages/${messageId}/send-now`);
+  }
+
+  async deleteScheduledMessage(messageId: string): Promise<void> {
+    await this.client.delete(`/messages/${messageId}`);
   }
 
   // Tags

@@ -18,6 +18,10 @@ class MessageCreate(BaseModel):
     template_id: UUID | None = None
     reply_to_message_id: UUID | None = None
     phone_id: UUID | None = None
+    scheduled_at: datetime | None = Field(
+        default=None, 
+        description="ISO 8601 datetime to schedule message for future delivery"
+    )
 
 
 class WhatsAppMessage(BaseModel):
@@ -75,6 +79,8 @@ class MessageResponse(UUIDMixin):
     message_type: str
     body: str | None = None
     created_at: datetime
+    sent_at: datetime | None = None
+    scheduled_at: datetime | None = None
     reply_to_message_id: UUID | None = None
     reaction: str | None = None
     media_files: list[MediaFileResponse] = Field(default_factory=list)
