@@ -37,6 +37,7 @@ import {
   QuickReplyCreate,
   QuickReplyUpdate,
   QuickReplyTextResponse,
+  HealthResponse,
 } from "../types";
 
 export class ApiClient {
@@ -536,6 +537,11 @@ export class ApiClient {
 
   getAxiosInstance(): AxiosInstance {
     return this.client;
+  }
+
+  async getSystemHealth(): Promise<HealthResponse> {
+    const response = await this.client.get<HealthResponse>("/health/ready");
+    return response.data;
   }
 }
 

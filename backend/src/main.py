@@ -10,6 +10,7 @@ from src.routes import (
     campaigns,
     contacts,
     dashboard,
+    health,
     messages,
     replies,
     tags,
@@ -51,3 +52,4 @@ app.include_router(templates.router)
 app.include_router(replies.router)
 app.include_router(dashboard.router)
 app.include_router(tags.router)
+app.include_router(health.router)

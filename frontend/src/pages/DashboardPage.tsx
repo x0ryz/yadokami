@@ -18,6 +18,7 @@ import {
   Smartphone,
   RefreshCw,
 } from "lucide-react";
+import SystemHealthWidget from "../components/widgets/SystemHealthWidget";
 
 const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -156,8 +157,8 @@ const DashboardPage: React.FC = () => {
               disabled={syncing}
               title="Оновити статус WABA"
               className={`p-1.5 rounded-md transition-all duration-200 ${syncing
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 active:scale-95"
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 active:scale-95"
                 }`}
             >
               <RefreshCw
@@ -239,76 +240,82 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Phone Numbers Section */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col h-full max-h-[460px]">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
-            <div className="flex items-center">
-              <Smartphone className="h-5 w-5 mr-2 text-gray-500" />
-              Phone Numbers
-            </div>
-            {wabaStatus?.phone_numbers && (
-              <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-                {wabaStatus.phone_numbers.length}
-              </span>
-            )}
-          </h2>
-
-          <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar">
-            {wabaStatus?.phone_numbers &&
-              wabaStatus.phone_numbers.length > 0 ? (
-              <ul className="space-y-3">
-                {wabaStatus.phone_numbers.map((phone) => (
-                  <li
-                    key={phone.id}
-                    className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-indigo-100 transition-colors"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="font-semibold text-gray-900">
-                        {phone.display_phone_number}
-                      </div>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getStatusColor(phone.status)}`}
-                      >
-                        {phone.status || "UNK"}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                      <div>
-                        <span className="block text-[10px] uppercase tracking-wider text-gray-400">
-                          Quality
-                        </span>
-                        <span
-                          className={`inline-block mt-0.5 px-1.5 py-0.5 rounded font-medium ${getQualityColor(phone.quality_rating)}`}
-                        >
-                          {phone.quality_rating}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="block text-[10px] uppercase tracking-wider text-gray-400">
-                          Limit
-                        </span>
-                        <span className="font-medium text-gray-700 mt-0.5 block">
-                          {phone.messaging_limit_tier?.replace("_", " ") ||
-                            "N/A"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {phone.updated_at && (
-                      <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-400 text-right">
-                        Upd: {new Date(phone.updated_at).toLocaleDateString()}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-center text-gray-500 py-8">
-                No phone numbers found
+        {/* Right Column */}
+        <div className="space-y-6">
+          {/* Phone Numbers Section */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col h-full">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+              <div className="flex items-center">
+                <Smartphone className="h-5 w-5 mr-2 text-gray-500" />
+                Phone Numbers
               </div>
-            )}
+              {wabaStatus?.phone_numbers && (
+                <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+                  {wabaStatus.phone_numbers.length}
+                </span>
+              )}
+            </h2>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar">
+              {wabaStatus?.phone_numbers &&
+                wabaStatus.phone_numbers.length > 0 ? (
+                <ul className="space-y-3">
+                  {wabaStatus.phone_numbers.map((phone) => (
+                    <li
+                      key={phone.id}
+                      className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-indigo-100 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-semibold text-gray-900">
+                          {phone.display_phone_number}
+                        </div>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${getStatusColor(phone.status)}`}
+                        >
+                          {phone.status || "UNK"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider text-gray-400">
+                            Quality
+                          </span>
+                          <span
+                            className={`inline-block mt-0.5 px-1.5 py-0.5 rounded font-medium ${getQualityColor(phone.quality_rating)}`}
+                          >
+                            {phone.quality_rating}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-[10px] uppercase tracking-wider text-gray-400">
+                            Limit
+                          </span>
+                          <span className="font-medium text-gray-700 mt-0.5 block">
+                            {phone.messaging_limit_tier?.replace("_", " ") ||
+                              "N/A"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {phone.updated_at && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-400 text-right">
+                          Upd: {new Date(phone.updated_at).toLocaleDateString()}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  No phone numbers found
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* System Health Section */}
+          <SystemHealthWidget />
         </div>
       </div>
     </div>

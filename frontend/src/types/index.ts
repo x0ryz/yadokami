@@ -424,3 +424,18 @@ export interface QuickReplyTextResponse {
   text: string;
   language: string;
 }
+
+// Health Check Types
+export interface HealthComponent {
+  status: "up" | "down" | "degraded";
+  latency_ms: number;
+  details?: string | null;
+}
+
+export interface HealthResponse {
+  status: "healthy" | "unhealthy" | "degraded";
+  version: string;
+  uptime_seconds: number;
+  timestamp: string;
+  components: Record<string, HealthComponent>;
+}

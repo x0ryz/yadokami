@@ -24,7 +24,7 @@ async def start_websocket_listener() -> None:
 
 async def initialize_broker() -> None:
     """Initialize the NATS broker for publishing (not worker mode)."""
-    await broker.connect()
+    await broker.start()
     logger.info("NATS broker connected for publishing")
 
     # Setup JetStream streams and KV buckets
@@ -45,7 +45,7 @@ async def shutdown_background_tasks() -> None:
 
 async def shutdown_broker() -> None:
     """Shutdown the NATS broker connection."""
-    await broker.stop()
+    await broker.close()
     logger.info("NATS broker disconnected")
 
 
@@ -59,6 +59,15 @@ async def shutdown_database() -> None:
 async def lifespan(app: FastAPI):
     """Manage application lifecycle: startup and shutdown."""
     logger.info("Lifespan: Starting up...")
+
+    import logging
+
+    # Filter out /health endpoint logs from uvicorn AccessLogger
+    class EndpointFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return record.args and len(record.args) >= 3 and record.args[2] != "/health/live" and record.args[2] != "/health/ready"
+
+    logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
     await start_websocket_listener()
     await initialize_broker()

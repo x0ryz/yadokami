@@ -18,6 +18,15 @@ services:
       - tmp:/tmp
     env_file: .env
     command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8000/health/live || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      nats:
+        condition: service_started
 
   worker:
     build:
@@ -35,7 +44,8 @@ services:
       dockerfile: Dockerfile
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   tmp:
