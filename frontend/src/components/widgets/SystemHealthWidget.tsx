@@ -37,7 +37,7 @@ const SystemHealthWidget: React.FC = () => {
 
     if (loading && !health) {
         return (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 animate-pulse h-[200px]">
+            <div className="bg-white p-6 rounded-lg border border-gray-200 animate-pulse h-[200px]">
                 <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
                 <div className="space-y-3">
                     <div className="h-10 bg-gray-200 rounded"></div>
@@ -89,7 +89,7 @@ const SystemHealthWidget: React.FC = () => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-500 text-sm font-medium flex items-center gap-2">
                     <Activity className="w-4 h-4" />
@@ -117,7 +117,7 @@ const SystemHealthWidget: React.FC = () => {
                         {/* API / Backend */}
                         <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-md shadow-sm">
+                                <div className="p-2 bg-white rounded-md border border-gray-100">
                                     <Server className="w-4 h-4 text-indigo-500" />
                                 </div>
                                 <div>
@@ -134,7 +134,7 @@ const SystemHealthWidget: React.FC = () => {
                         {/* Database */}
                         <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-md shadow-sm">
+                                <div className="p-2 bg-white rounded-md border border-gray-100">
                                     <Database className="w-4 h-4 text-blue-500" />
                                 </div>
                                 <div>
@@ -150,7 +150,7 @@ const SystemHealthWidget: React.FC = () => {
                         {/* Broker */}
                         <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-md shadow-sm">
+                                <div className="p-2 bg-white rounded-md border border-gray-100">
                                     <Activity className="w-4 h-4 text-orange-500" />
                                 </div>
                                 <div>

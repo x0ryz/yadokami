@@ -102,15 +102,20 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="text-sm text-gray-500">Overview of your business messaging</div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Overview of your business messaging
+          </p>
+        </div>
       </div>
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Contacts */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-500 text-sm font-medium">Contacts</h3>
             <div className="p-2 bg-indigo-50 rounded-lg">
@@ -129,7 +134,7 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Messages */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-500 text-sm font-medium">Messages (24h)</h3>
             <div className="p-2 bg-green-50 rounded-lg">
@@ -139,8 +144,8 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-baseline gap-2">
             <div className="text-3xl font-bold text-gray-900">{stats.messages.last_24h.toLocaleString()}</div>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${stats.messages.delivery_rate > 90 ? 'text-green-600 bg-green-50 border-green-100' :
-                stats.messages.delivery_rate > 70 ? 'text-yellow-600 bg-yellow-50 border-yellow-100' :
-                  'text-red-600 bg-red-50 border-red-100'
+              stats.messages.delivery_rate > 70 ? 'text-yellow-600 bg-yellow-50 border-yellow-100' :
+                'text-red-600 bg-red-50 border-red-100'
               }`}>
               {stats.messages.delivery_rate}% deliv.
             </span>
@@ -151,7 +156,7 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Campaigns */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-500 text-sm font-medium">Active Campaigns</h3>
             <div className="p-2 bg-purple-50 rounded-lg">
@@ -179,7 +184,7 @@ const DashboardPage: React.FC = () => {
         {/* Left Column: Analytics */}
         <div className="lg:col-span-2 space-y-6">
           {/* Chart Card */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-[400px]">
+          <div className="bg-white p-6 rounded-xl border border-gray-200 h-[400px]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900">Message Traffic</h2>
               <select className="text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
@@ -222,7 +227,7 @@ const DashboardPage: React.FC = () => {
         <div className="space-y-6">
 
           {/* WhatsApp Connection Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
               <h2 className="font-semibold text-gray-900 flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-green-600" />
@@ -231,7 +236,7 @@ const DashboardPage: React.FC = () => {
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                className={`p-1.5 rounded-md transition-all ${syncing ? 'bg-gray-200 cursor-not-allowed' : 'hover:bg-white hover:shadow-sm text-gray-500 hover:text-indigo-600'}`}
+                className={`p-1.5 rounded-md transition-all ${syncing ? 'bg-gray-200 cursor-not-allowed' : 'hover:bg-white border border-transparent hover:border-gray-200 text-gray-500 hover:text-indigo-600'}`}
                 title="Sync Account Info"
               >
                 <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
