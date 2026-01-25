@@ -98,7 +98,7 @@ class CampaignMessageExecutor:
             logger.info(f"Final template_params being sent: {template_params}")
         except ValueError as validation_error:
             # Handle missing contact data - create failed message
-            logger.error(
+            logger.warning(
                 f"Contact {contact_id} validation failed: {validation_error}")
 
             # Create a failed message to store the error

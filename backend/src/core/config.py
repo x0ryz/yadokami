@@ -24,9 +24,9 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_WORKER_DSN: str | None = None
 
-    TG_BOT_TOKEN: str
-    TG_DEV_ID: int
-    TG_ADMIN_GROUP_ID: int
+    TG_BOT_TOKEN: str | None = None
+    TG_DEV_ID: int | None = None
+    TG_ADMIN_GROUP_ID: int | None = None
 
     MAX_CAMPAIGN_RETRIES: int = 2
 

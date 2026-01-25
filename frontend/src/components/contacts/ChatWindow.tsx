@@ -666,9 +666,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                           }}
                           className={`text-[10px] ${getStatusClass(message.status)} ${message.scheduled_at ? "cursor-pointer" : "cursor-help"} flex items-center justify-center`}
                           title={
-                            message.scheduled_at
-                              ? `Статус: ${message.status}\nЗаплановано на: ${new Date(message.scheduled_at).toLocaleString('uk-UA')}`
-                              : ''
+                            message.status === MessageStatus.FAILED
+                              ? `Помилка: ${message.error_message || "Невідома помилка"}`
+                              : message.scheduled_at
+                                ? `Статус: ${message.status}\nЗаплановано на: ${new Date(
+                                  message.scheduled_at,
+                                ).toLocaleString("uk-UA")}`
+                                : `Статус: ${message.status}`
                           }
                         >
                           {getStatusIcon(message.status)}

@@ -117,11 +117,11 @@ async def get_quick_reply_text(
         raise NotFoundError(detail="Quick reply not found")
 
     text = quick_reply.get_text(language)
-    actual_language = (
-        language
-        if language in quick_reply.content
-        else quick_reply.default_language
-    )
+    
+    actual_language = language
+    if language not in quick_reply.content and quick_reply.content:
+        # Fallback to the first available language key
+        actual_language = next(iter(quick_reply.content.keys()))
 
     return QuickReplyTextResponse(text=text, language=actual_language)
 
@@ -167,8 +167,8 @@ async def remove_language_content(
     if not quick_reply:
         raise NotFoundError(detail="Quick reply not found")
 
-    if language == quick_reply.default_language:
-        raise BadRequestError(detail="Cannot remove default language content")
+    if len(quick_reply.content) <= 1:
+        raise BadRequestError(detail="Cannot remove the last remaining language content")
 
     if language not in quick_reply.content:
         raise BadRequestError(
