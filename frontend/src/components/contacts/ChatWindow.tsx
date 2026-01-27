@@ -166,6 +166,45 @@ const SessionTimer: React.FC<{ lastIncomingAt: string | null | undefined }> = ({
   );
 };
 
+// --- DATE HELPERS ---
+const getDateIdentifier = (dateString: string | null | undefined): string => {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleDateString("uk-UA");
+};
+
+const getDateLabel = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isToday) return "Сьогодні";
+  if (isYesterday) return "Вчора";
+  return date.toLocaleDateString("uk-UA", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const DateSeparator: React.FC<{ date: string }> = ({ date }) => (
+  <div className="flex justify-center my-4">
+    <span className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full shadow-sm border border-gray-300">
+      {getDateLabel(date)}
+    </span>
+  </div>
+);
+
 // --- ОСНОВНИЙ КОМПОНЕНТ ---
 
 interface ChatWindowProps {
@@ -560,13 +599,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </button>
               </div>
             )}
-            {messages.map((message) => {
+            {messages.map((message, index) => {
               const isOutbound = message.direction === MessageDirection.OUTBOUND;
               const repliedMessage = getReplyingToMessage(
                 message.reply_to_message_id,
               );
               const hasReaction = !!message.reaction;
               const paddingClass = hasReaction ? "pt-2 pb-5 px-3" : "py-2 px-3";
+
+              // Date Separation Logic
+              const currentDate = message.sent_at || message.scheduled_at || message.created_at || "";
+              const previousDate = index > 0
+                ? (messages[index - 1].sent_at || messages[index - 1].scheduled_at || messages[index - 1].created_at || "")
+                : "";
+
+              const currentDayId = getDateIdentifier(currentDate);
+              const previousDayId = getDateIdentifier(previousDate);
+              const showDateSeparator = index === 0 || currentDayId !== previousDayId;
 
               // Debug logging for failed messages
               if (message.status === MessageStatus.FAILED) {
@@ -579,126 +628,128 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               }
 
               return (
-                <div
-                  key={message.id}
-                  className={`flex ${isOutbound ? "justify-end" : "justify-start"} group ${hasReaction ? "mb-4" : "mb-1"}`}
-                >
+                <React.Fragment key={message.id}>
+                  {showDateSeparator && currentDayId && (
+                    <DateSeparator date={currentDate} />
+                  )}
                   <div
-                    className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-lg shadow-sm text-sm leading-relaxed
-                    ${isOutbound
-                        ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
-                        : "bg-white text-gray-900 rounded-tl-none"
-                      }`}
+                    className={`flex ${isOutbound ? "justify-end" : "justify-start"} group ${hasReaction ? "mb-4" : "mb-1"}`}
                   >
-                    {repliedMessage && (
-                      <div
-                        className={`mb-2 p-2 rounded border-l-4 text-xs cursor-pointer opacity-80
-                      ${isOutbound ? "bg-[#cfe9c6] border-green-600" : "bg-gray-100 border-gray-400"}`}
-                        onClick={() => {
-                          const el = document.getElementById(
-                            `msg-${repliedMessage.id}`,
-                          );
-                          el?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          });
-                        }}
-                      >
-                        <div className="font-bold text-gray-700 mb-1">
-                          {repliedMessage.direction === MessageDirection.OUTBOUND
-                            ? "Ви"
-                            : contact.name || contact.phone_number}
-                        </div>
-                        <div className="truncate line-clamp-1">
-                          {repliedMessage.body || "Медіа файл"}
-                        </div>
-                      </div>
-                    )}
-
-                    <div id={`msg-${message.id}`}>
-                      {/* Media Files */}
-                      {message.media_files?.length > 0 && (
-                        <div className="mb-2 grid gap-1">
-                          {message.media_files?.map((media) => (
-                            <div
-                              key={media.id}
-                              className="rounded overflow-hidden"
-                            >
-                              <a
-                                href={media.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
-                              >
-                                <Paperclip className="w-5 h-5 text-gray-600" />
-                                <span className="underline decoration-dotted">
-                                  {media.file_name}
-                                </span>
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {message.body && (
-                        <div className="whitespace-pre-wrap">{message.body}</div>
-                      )}
-                    </div>
-
-
-
-                    <div className="flex items-center justify-end gap-1 mt-1 select-none">
-                      <span className="text-[10px] text-gray-500">
-                        {formatMessageTime(message.sent_at || message.scheduled_at || message.created_at)}
-                      </span>
-                      {isOutbound && (
-                        <span
-                          onClick={(e) => {
-                            if (message.scheduled_at) {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setScheduledMessageMenu({
-                                messageId: message.id,
-                                x: rect.left,
-                                y: rect.bottom + 5,
-                              });
-                            }
-                          }}
-                          className={`text-[10px] ${getStatusClass(message.status)} ${message.scheduled_at ? "cursor-pointer" : "cursor-help"} flex items-center justify-center`}
-                          title={
-                            message.status === MessageStatus.FAILED
-                              ? `Помилка: ${message.error_message || "Невідома помилка"}`
-                              : message.scheduled_at
-                                ? `Статус: ${message.status}\nЗаплановано на: ${new Date(
-                                  message.scheduled_at,
-                                ).toLocaleString("uk-UA")}`
-                                : `Статус: ${message.status}`
-                          }
-                        >
-                          {getStatusIcon(message.status)}
-                        </span>
-                      )}
-                    </div>
-
-                    {message.reaction && (
-                      <div
-                        className={`absolute -bottom-3 ${isOutbound ? "right-0" : "left-0"}
-                      bg-white rounded-full px-1.5 py-0.5 shadow-sm text-base border border-gray-100 z-10`}
-                      >
-                        {message.reaction}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => setReplyTo(message)}
-                      className={`absolute top-0 ${isOutbound ? "-left-8" : "-right-8"}
-                      opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity`}
-                      title="Відповісти"
+                    <div
+                      className={`relative max-w-[85%] lg:max-w-[70%] ${paddingClass} rounded-lg shadow-sm text-sm leading-relaxed
+                    ${isOutbound
+                          ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none"
+                          : "bg-white text-gray-900 rounded-tl-none"
+                        }`}
                     >
-                      <CornerUpLeft className="w-4 h-4" />
-                    </button>
+                      {repliedMessage && (
+                        <div
+                          className={`mb-2 p-2 rounded border-l-4 text-xs cursor-pointer opacity-80
+                      ${isOutbound ? "bg-[#cfe9c6] border-green-600" : "bg-gray-100 border-gray-400"}`}
+                          onClick={() => {
+                            const el = document.getElementById(
+                              `msg-${repliedMessage.id}`,
+                            );
+                            el?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
+                          }}
+                        >
+                          <div className="font-bold text-gray-700 mb-1">
+                            {repliedMessage.direction === MessageDirection.OUTBOUND
+                              ? "Ви"
+                              : contact.name || contact.phone_number}
+                          </div>
+                          <div className="truncate line-clamp-1">
+                            {repliedMessage.body || "Медіа файл"}
+                          </div>
+                        </div>
+                      )}
+
+                      <div id={`msg-${message.id}`}>
+                        {/* Media Files */}
+                        {message.media_files?.length > 0 && (
+                          <div className="mb-2 grid gap-1">
+                            {message.media_files?.map((media) => (
+                              <div
+                                key={media.id}
+                                className="rounded overflow-hidden"
+                              >
+                                <a
+                                  href={media.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 p-3 bg-black/5 rounded-lg hover:bg-black/10 transition border border-black/5"
+                                >
+                                  <Paperclip className="w-5 h-5 text-gray-600" />
+                                  <span className="underline decoration-dotted">
+                                    {media.file_name}
+                                  </span>
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {message.body && (
+                          <div className="whitespace-pre-wrap">{message.body}</div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1 mt-1 select-none">
+                        <span className="text-[10px] text-gray-500">
+                          {formatMessageTime(message.sent_at || message.scheduled_at || message.created_at)}
+                        </span>
+                        {isOutbound && (
+                          <span
+                            onClick={(e) => {
+                              if (message.scheduled_at) {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setScheduledMessageMenu({
+                                  messageId: message.id,
+                                  x: rect.left,
+                                  y: rect.bottom + 5,
+                                });
+                              }
+                            }}
+                            className={`text-[10px] ${getStatusClass(message.status)} ${message.scheduled_at ? "cursor-pointer" : "cursor-help"} flex items-center justify-center`}
+                            title={
+                              message.status === MessageStatus.FAILED
+                                ? `Помилка: ${message.error_message || "Невідома помилка"}`
+                                : message.scheduled_at
+                                  ? `Статус: ${message.status}\nЗаплановано на: ${new Date(
+                                    message.scheduled_at,
+                                  ).toLocaleString("uk-UA")}`
+                                  : `Статус: ${message.status}`
+                            }
+                          >
+                            {getStatusIcon(message.status)}
+                          </span>
+                        )}
+                      </div>
+
+                      {message.reaction && (
+                        <div
+                          className={`absolute -bottom-3 ${isOutbound ? "right-0" : "left-0"}
+                      bg-white rounded-full px-1.5 py-0.5 shadow-sm text-base border border-gray-100 z-10`}
+                        >
+                          {message.reaction}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => setReplyTo(message)}
+                        className={`absolute top-0 ${isOutbound ? "-left-8" : "-right-8"}
+                      opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity`}
+                        title="Відповісти"
+                      >
+                        <CornerUpLeft className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </React.Fragment>
               );
             })}
           </>
@@ -980,7 +1031,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
       </div>
 
-      {/* Scheduled Message Context Menu */}
       {/* Scheduled Message Context Menu */}
       {
         scheduledMessageMenu &&

@@ -49,7 +49,7 @@ async def scheduled_campaigns_checker(broker):
                                 check_session)
                             notifier = NotificationService()
                             lifecycle = CampaignLifecycleManager(
-                                check_session, check_campaigns_repo, notifier, {}
+                                check_session, check_campaigns_repo, notifier
                             )
                             await lifecycle.check_and_complete_if_done(campaign.id)
                             await check_session.commit()
