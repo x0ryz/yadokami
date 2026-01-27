@@ -11,6 +11,7 @@ import {
 import TagSelector from "../tags/TagSelector";
 import ContactActionsMenu from "./ContactActionsMenu";
 import QuickReplyPicker from "../quickReplies/QuickReplyPicker";
+import WhatsAppTextFormatter from "../ui/WhatsAppTextFormatter";
 import { apiClient } from "../../api";
 import {
   detectLanguageFromPhone,
@@ -698,7 +699,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         )}
 
                         {message.body && (
-                          <div className="whitespace-pre-wrap">{message.body}</div>
+                          <WhatsAppTextFormatter text={message.body} />
                         )}
                       </div>
 

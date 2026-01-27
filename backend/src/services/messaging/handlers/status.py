@@ -53,8 +53,8 @@ class StatusHandler:
                 # --- ДОДАНО: Збереження помилок від Meta ---
                 if new_status == MessageStatus.FAILED and status.errors:
                     error_obj = status.errors[0]  # Беремо першу помилку
-                    db_message.error_code = error_obj.code
-                    db_message.error_message = error_obj.title or error_obj.message
+                    db_message.error_code = error_obj.get("code")
+                    db_message.error_message = error_obj.get("title") or error_obj.get("message")
                     logger.warning(
                         f"Message {db_message.id} failed: {db_message.error_message}"
                     )
@@ -62,8 +62,6 @@ class StatusHandler:
 
                 self.messages.add(db_message)
 
-                # --- ВИДАЛЕНО: self.campaign_tracker.update_on_status_change ---
-                # Більше не викликаємо трекер, бо ми оновили статус прямо в message
 
                 # Prepare notification data
                 notifications_to_send.append(

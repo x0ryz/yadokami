@@ -451,12 +451,47 @@ class MessageSenderService:
                 logger.warning(
                     f"Reply target message {reply_to_message_id} not found")
 
+        # Render template body if this is a template message
+        message_body = body
+        if message_type == "template" and template_id:
+            from src.repositories.template import TemplateRepository
+            from src.utils.template_renderer import render_template_for_message
+
+            # Load template to get components
+            template_repo = TemplateRepository(self.session)
+            template = await template_repo.get_by_id(template_id)
+
+            if template and template.components:
+                # Extract parameter values from template_parameters
+                param_values = []
+                if template_parameters:
+                    for param in template_parameters:
+                        if param.get("type") == "text":
+                            param_values.append(param.get("text", ""))
+
+                # Render the full message text
+                try:
+                    message_body = render_template_for_message(
+                        template.components,
+                        param_values if param_values else None
+                    )
+                except Exception as render_error:
+                    logger.warning(
+                        f"Failed to render template {template_id}: {render_error}")
+                    # Fall back to template name if rendering fails
+                    message_body = template_name or "Template message"
+            else:
+                # No template found or no components
+                message_body = template_name or "Template message"
+
         # Use existing message or create new one
         if existing_message:
             message = existing_message
             # Ensure critical fields are set/updated if needed
             if not message.waba_phone_id:
                 message.waba_phone_id = waba_phone.id
+            # Update body with rendered text
+            message.body = message_body
         else:
             message = await self.messages.create(
                 waba_phone_id=waba_phone.id,
@@ -464,7 +499,7 @@ class MessageSenderService:
                 direction=MessageDirection.OUTBOUND,
                 status=MessageStatus.PENDING,
                 message_type=message_type,
-                body=body if message_type == "text" else template_name,
+                body=message_body,
                 template_id=template_id,
                 reply_to_message_id=reply_to_message_id,
             )
@@ -481,11 +516,9 @@ class MessageSenderService:
         if not is_campaign:
             await self.notifier.notify_new_message(message, phone=contact.phone_number)
 
-            preview_body = (
-                body
-                if message_type == "text"
-                else (template_name or f"Sent {message_type}")
-            )
+            # Use the rendered message body for preview
+            preview_body = message_body or (
+                template_name or f"Sent {message_type}")
 
             await self.notifier._publish(
                 {

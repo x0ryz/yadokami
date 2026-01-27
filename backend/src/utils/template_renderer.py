@@ -1,4 +1,134 @@
 """Template parameter rendering utilities."""
+import re
+from typing import Any
+
+
+def render_template_for_message(
+    template_components: list[dict],
+    parameters: list[str] | None = None,
+) -> str:
+    """
+    Render a WhatsApp template by replacing placeholders with actual values.
+
+    Combines HEADER, BODY, and FOOTER components into a single message text.
+    Replaces {{1}}, {{2}}, etc. placeholders with provided parameters.
+
+    Args:
+        template_components: Template components from Meta API (stored in Template.components)
+        parameters: List of parameter values in order (0-indexed list for 1-indexed placeholders)
+                   e.g., ["John", "New York"] for {{1}} and {{2}}
+
+    Returns:
+        Fully rendered message text with all components combined
+
+    Example:
+        >>> components = [
+        ...     {"type": "HEADER", "format": "TEXT", "text": "Hello {{1}}!"},
+        ...     {"type": "BODY", "text": "Welcome to {{2}}. Thanks for joining!"},
+        ...     {"type": "FOOTER", "text": "Reply STOP to unsubscribe"}
+        ... ]
+        >>> render_template_for_message(components, ["John", "NYC"])
+        'Hello John!\\n\\nWelcome to NYC. Thanks for joining!\\n\\nReply STOP to unsubscribe'
+    """
+    parts = []
+
+    for component in template_components:
+        component_type = component.get("type", "").upper()
+
+        if component_type == "HEADER":
+            # Handle text headers
+            if component.get("format") == "TEXT":
+                header_text = component.get("text", "")
+                if header_text:
+                    rendered = _replace_placeholders(header_text, parameters)
+                    parts.append(f"*{rendered}*")
+
+        elif component_type == "BODY":
+            body_text = component.get("text", "")
+            if body_text:
+                rendered = _replace_placeholders(body_text, parameters)
+                parts.append(rendered)
+
+        elif component_type == "FOOTER":
+            footer_text = component.get("text", "")
+            if footer_text:
+                parts.append(f"_{footer_text}_")  # Footers don't have parameters
+
+        elif component_type == "BUTTONS":
+            # Skip buttons - they're interactive elements not part of message text
+            pass
+
+    # Join parts with double newline for clear separation
+    return "\n\n".join(parts)
+
+
+def _replace_placeholders(text: str, parameters: list[str] | None) -> str:
+    """
+    Replace {{1}}, {{2}}, etc. placeholders with actual parameter values.
+
+    WhatsApp uses 1-indexed placeholders, so {{1}} maps to parameters[0].
+
+    Args:
+        text: Text containing {{N}} placeholders
+        parameters: List of values (0-indexed)
+
+    Returns:
+        Text with placeholders replaced, or original placeholders if param missing
+    """
+    if not parameters:
+        return text
+
+    def replacer(match: re.Match) -> str:
+        # Get the placeholder number (1-indexed)
+        placeholder_num = int(match.group(1))
+        # Convert to 0-indexed array access
+        param_index = placeholder_num - 1
+
+        # Return parameter value if available, otherwise keep placeholder
+        if 0 <= param_index < len(parameters):
+            return str(parameters[param_index])
+        return match.group(0)  # Keep original {{N}} if no param
+
+    # Find and replace all {{N}} patterns
+    return re.sub(r'\{\{(\d+)\}\}', replacer, text)
+
+
+def extract_template_variables(template_components: list[dict]) -> list[int]:
+    """
+    Extract all variable placeholder numbers from a template.
+
+    Useful for validation and debugging.
+
+    Args:
+        template_components: Template components from Meta API
+
+    Returns:
+        Sorted list of placeholder numbers found (e.g., [1, 2, 3])
+
+    Example:
+        >>> components = [
+        ...     {"type": "HEADER", "format": "TEXT", "text": "Hello {{1}}!"},
+        ...     {"type": "BODY", "text": "You have {{2}} items in {{3}}"}
+        ... ]
+        >>> extract_template_variables(components)
+        [1, 2, 3]
+    """
+    variables = set()
+
+    for component in template_components:
+        component_type = component.get("type", "").upper()
+        text = None
+
+        if component_type == "HEADER" and component.get("format") == "TEXT":
+            text = component.get("text")
+        elif component_type == "BODY":
+            text = component.get("text")
+
+        if text:
+            matches = re.findall(r'\{\{(\d+)\}\}', text)
+            variables.update(int(m) for m in matches)
+
+    return sorted(variables)
 
 
 def count_template_parameters(template_components: list[dict]) -> int:
