@@ -1,10 +1,10 @@
 import React from "react";
-import { CampaignResponse, CampaignStatus } from "../../types";
+import { CampaignListResponse, CampaignStatus } from "../../types";
 
 interface CampaignListProps {
-  campaigns: CampaignResponse[];
-  selectedCampaign: CampaignResponse | null;
-  onSelectCampaign: (campaign: CampaignResponse) => void;
+  campaigns: CampaignListResponse[];
+  selectedCampaign: CampaignListResponse | null;
+  onSelectCampaign: (campaign: CampaignListResponse) => void;
   onDeleteCampaign: (campaignId: string) => void;
 }
 
@@ -37,11 +37,10 @@ const CampaignList: React.FC<CampaignListProps> = ({
         <div
           key={campaign.id}
           onClick={() => onSelectCampaign(campaign)}
-          className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-            selectedCampaign?.id === campaign.id
-              ? "bg-blue-50 border-blue-200"
-              : ""
-          }`}
+          className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${selectedCampaign?.id === campaign.id
+            ? "bg-blue-50 border-blue-200"
+            : ""
+            }`}
         >
           <div className="flex items-start justify-between mb-2">
             <h3 className="font-semibold text-gray-900 flex-1">
@@ -55,24 +54,7 @@ const CampaignList: React.FC<CampaignListProps> = ({
           </div>
           <div className="text-sm text-gray-600 space-y-1">
             <div className="flex items-center gap-4">
-              <span>
-                <span className="font-medium">Контактив:</span>{" "}
-                {campaign.total_contacts}
-              </span>
-              <span>
-                <span className="font-medium">Відправлено:</span>{" "}
-                {campaign.sent_count}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-green-600">
-                Доставлено: {campaign.delivered_count}
-              </span>
-              {campaign.failed_count > 0 && (
-                <span className="text-red-600">
-                  Помилок: {campaign.failed_count}
-                </span>
-              )}
+              {/* Type display removed as per request */}
             </div>
             {campaign.scheduled_at && (
               <p className="text-xs text-gray-500">

@@ -9,6 +9,8 @@ import {
   ContactImportResult,
   DuplicateCheckResult,
   CampaignResponse,
+  CampaignListResponse,
+  CampaignStatsResponse,
   CampaignCreate,
   CampaignUpdate,
   CampaignStats,
@@ -278,8 +280,9 @@ export class ApiClient {
   }
 
   // Campaigns
-  async listCampaigns(status?: CampaignStatus): Promise<CampaignResponse[]> {
-    const response = await this.client.get<CampaignResponse[]>("/campaigns", {
+  // Campaigns
+  async listCampaigns(status?: CampaignStatus): Promise<CampaignListResponse[]> {
+    const response = await this.client.get<CampaignListResponse[]>("/campaigns", {
       params: { status },
     });
     return response.data;
@@ -347,8 +350,8 @@ export class ApiClient {
     return response.data;
   }
 
-  async getCampaignStats(campaignId: string): Promise<CampaignStats> {
-    const response = await this.client.get<CampaignStats>(
+  async getCampaignStats(campaignId: string): Promise<CampaignStatsResponse> {
+    const response = await this.client.get<CampaignStatsResponse>(
       `/campaigns/${campaignId}/stats`,
     );
     return response.data;

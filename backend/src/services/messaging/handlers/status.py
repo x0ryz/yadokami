@@ -1,9 +1,9 @@
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import MessageStatus
 from src.repositories.message import MessageRepository
 from src.schemas import MetaStatus
-from src.services.campaign.tracker import CampaignTrackerService
 from src.services.notifications.service import NotificationService
 
 
@@ -14,12 +14,9 @@ class StatusHandler:
         self,
         session: AsyncSession,
         notifier: NotificationService,
-        campaign_tracker: CampaignTrackerService,
     ):
         self.session = session
         self.notifier = notifier
-        self.campaign_tracker = campaign_tracker
-
         self.messages = MessageRepository(session)
 
     async def handle(self, statuses: list[MetaStatus]):
@@ -38,17 +35,35 @@ class StatusHandler:
             if not new_status:
                 continue
 
+            # 1. Шукаємо повідомлення
+            # Важливо: переконайся, що get_by_wamid підтягує contact (joinedload),
+            # інакше message.contact.phone_number викличе додатковий запит або помилку
             db_message = await self.messages.get_by_wamid(status.id)
+
             if not db_message:
+                logger.debug(
+                    f"Message with wamid {status.id} not found, skipping update."
+                )
                 continue
 
+            # 2. Оновлюємо, тільки якщо новий статус "старший"
             if self._is_newer_status(db_message.status, new_status):
                 db_message.status = new_status
+
+                # --- ДОДАНО: Збереження помилок від Meta ---
+                if new_status == MessageStatus.FAILED and status.errors:
+                    error_obj = status.errors[0]  # Беремо першу помилку
+                    db_message.error_code = error_obj.code
+                    db_message.error_message = error_obj.title or error_obj.message
+                    logger.warning(
+                        f"Message {db_message.id} failed: {db_message.error_message}"
+                    )
+                # -------------------------------------------
+
                 self.messages.add(db_message)
 
-                await self.campaign_tracker.update_on_status_change(
-                    db_message.id, new_status
-                )
+                # --- ВИДАЛЕНО: self.campaign_tracker.update_on_status_change ---
+                # Більше не викликаємо трекер, бо ми оновили статус прямо в message
 
                 # Prepare notification data
                 notifications_to_send.append(
@@ -58,6 +73,9 @@ class StatusHandler:
                         "status": status.status,
                         "phone": db_message.contact.phone_number
                         if db_message.contact
+                        else None,
+                        "error": db_message.error_message
+                        if new_status == MessageStatus.FAILED
                         else None,
                     }
                 )
@@ -78,4 +96,5 @@ class StatusHandler:
             MessageStatus.READ: 3,
             MessageStatus.FAILED: 4,
         }
+        # FAILED має найвищий пріоритет, його не можна перезаписати на READ/DELIVERED
         return weights.get(new, -1) > weights.get(old, -1)

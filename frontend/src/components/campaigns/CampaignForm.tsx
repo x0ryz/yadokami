@@ -24,17 +24,12 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
   isEdit = false,
 }) => {
   const [name, setName] = useState(initialData?.name || "");
-  const [messageType, setMessageType] = useState<MessageType>(
-    (initialData?.message_type as MessageType) || MessageType.TEMPLATE,
-  );
   const [templateId, setTemplateId] = useState(initialData?.template_id || "");
   const [wabaPhoneId, setWabaPhoneId] = useState(
     (initialData && "waba_phone_id" in initialData && initialData.waba_phone_id) ||
-      "",
+    "",
   );
-  const [messageBody, setMessageBody] = useState(
-    initialData?.message_body || "",
-  );
+
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>(
     initialData?.variable_mapping || {}
   );
@@ -48,13 +43,8 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
   useEffect(() => {
     loadWabaPhones();
     loadAvailableFields();
+    loadTemplates();
   }, []);
-
-  useEffect(() => {
-    if (messageType === MessageType.TEMPLATE) {
-      loadTemplates();
-    }
-  }, [messageType]);
 
   // Auto-fill variable mapping when template is selected
   useEffect(() => {
@@ -89,7 +79,7 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
       setLoadingPhones(false);
     }
   };
-  
+
   const loadAvailableFields = async () => {
     try {
       setLoadingFields(true);
@@ -107,13 +97,9 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     if (isEdit) {
       const data: CampaignUpdate = {
         name: name || null,
-        message_type: messageType,
-        template_id:
-          messageType === MessageType.TEMPLATE ? templateId || null : null,
-        message_body:
-          messageType === MessageType.TEXT ? messageBody || null : null,
+        template_id: templateId || null,
         variable_mapping:
-          messageType === MessageType.TEMPLATE && Object.keys(variableMapping).length > 0
+          Object.keys(variableMapping).length > 0
             ? variableMapping
             : null,
       };
@@ -121,14 +107,10 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
     } else {
       const data: CampaignCreate = {
         name: name,
-        message_type: messageType,
-        template_id:
-          messageType === MessageType.TEMPLATE ? templateId || null : null,
+        template_id: templateId || null,
         waba_phone_id: wabaPhoneId || null,
-        message_body:
-          messageType === MessageType.TEXT ? messageBody || null : null,
         variable_mapping:
-          messageType === MessageType.TEMPLATE && Object.keys(variableMapping).length > 0
+          Object.keys(variableMapping).length > 0
             ? variableMapping
             : null,
       };
@@ -174,69 +156,39 @@ const CampaignForm: React.FC<CampaignFormProps> = ({
         )}
       </div>
 
+      {/* Removed Message Type selector, simplified to just Template selection */}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Тип повідомлення
+          Шаблон
         </label>
-        <select
-          value={messageType}
-          onChange={(e) => setMessageType(e.target.value as MessageType)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value={MessageType.TEMPLATE}>Шаблон</option>
-          <option value={MessageType.TEXT}>Текст</option>
-        </select>
+        {loadingTemplates ? (
+          <div className="text-sm text-gray-500">Завантаження шаблонів...</div>
+        ) : (
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Оберіть шаблон</option>
+            {templates
+              .filter((t) => t.status.toLowerCase().includes("approved"))
+              .map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} ({template.language})
+                </option>
+              ))}
+          </select>
+        )}
       </div>
 
-      {messageType === MessageType.TEMPLATE && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Шаблон <span className="text-red-500">*</span>
-          </label>
-          {loadingTemplates ? (
-            <div className="text-sm text-gray-500">Завантаження шаблонів...</div>
-          ) : (
-            <select
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Оберіть шаблон</option>
-              {templates
-                .filter((t) => t.status.toLowerCase().includes("approved"))
-                .map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.language})
-                  </option>
-                ))}
-            </select>
-          )}
-        </div>
-      )}
-      
-      {messageType === MessageType.TEMPLATE && templateId && (
+      {templateId && (
         <TemplateVariableMapper
           template={templates.find((t) => t.id === templateId) || null}
           variableMapping={variableMapping}
           onChange={setVariableMapping}
           availableFields={availableFields}
         />
-      )}
-
-      {messageType === MessageType.TEXT && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Текст повідомлення <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={messageBody}
-            onChange={(e) => setMessageBody(e.target.value)}
-            required
-            rows={5}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
       )}
 
       <div className="flex gap-2 justify-end">

@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.schemas import MetaWebhookPayload
-from src.services.campaign.tracker import CampaignTrackerService
 from src.services.media.service import MediaService
 from src.services.messaging.handlers import (
     IncomingMessageHandler,
@@ -24,11 +23,9 @@ class MessageProcessorService:
     ):
         self.session = session
 
-        self.campaign_tracker = CampaignTrackerService(session)
-
         self.incoming_handler = IncomingMessageHandler(session, media_service, notifier)
 
-        self.status_handler = StatusHandler(session, notifier, self.campaign_tracker)
+        self.status_handler = StatusHandler(session, notifier)
 
         self.system_handler = SystemEventHandler(session, notifier)
 

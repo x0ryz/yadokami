@@ -31,15 +31,6 @@ class ContactStatus(str, Enum):
     ARCHIVED = "archived"
 
 
-class CampaignDeliveryStatus(str, Enum):
-    QUEUED = "queued"
-    SENT = "sent"
-    DELIVERED = "delivered"
-    READ = "read"
-    FAILED = "failed"
-    REPLIED = "replied"
-
-
 class CampaignStatus(str, Enum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"

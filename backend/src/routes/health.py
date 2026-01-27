@@ -1,6 +1,5 @@
 import asyncio
 import time
-from datetime import datetime
 
 from fastapi import APIRouter, Response, status
 from loguru import logger
@@ -30,9 +29,7 @@ async def check_database() -> HealthComponent:
         latency = (time.time() - t0) * 1000
         logger.error(f"Health check failed for Database: {e}")
         return HealthComponent(
-            status="down",
-            latency_ms=round(latency, 2),
-            details=str(e)
+            status="down", latency_ms=round(latency, 2), details=str(e)
         )
 
 
@@ -43,29 +40,22 @@ async def check_broker() -> HealthComponent:
     try:
         # Ми намагаємось опублікувати порожнє повідомлення в топік health.check
         # Якщо брокер не підключений, faststream викине помилку (під капотом)
-        await broker.publish(
-            message={"ping": "pong"},
-            subject="health.check"
-        )
-        
+        await broker.publish(message={"ping": "pong"}, subject="health.check")
+
         latency = (time.time() - t0) * 1000
-        return HealthComponent(
-            status="up", 
-            latency_ms=round(latency, 2),
-            details=None
-        )
+        return HealthComponent(status="up", latency_ms=round(latency, 2), details=None)
     except Exception as e:
         latency = (time.time() - t0) * 1000
-        # logger.error(f"Health check failed for Broker: {e}") 
-        
+        # logger.error(f"Health check failed for Broker: {e}")
+
         # Diagnostics
         connected_prop = getattr(broker, "connected", "Unknown")
         error_type = type(e).__name__
-        
+
         return HealthComponent(
             status="down",
             latency_ms=round(latency, 2),
-            details=f"Publish failed: {error_type}: {str(e)} | broker.connected={connected_prop}"
+            details=f"Publish failed: {error_type}: {str(e)} | broker.connected={connected_prop}",
         )
 
 
@@ -87,10 +77,7 @@ async def readiness_probe(response: Response):
     Перевіряє чи сервіс МИТТЄВО готовий обробити запит (чи є зв'язок з БД та іншим).
     """
     # Паралельна перевірка всіх компонентів
-    db_status, broker_status = await asyncio.gather(
-        check_database(),
-        check_broker()
-    )
+    db_status, broker_status = await asyncio.gather(check_database(), check_broker())
 
     components = {
         "database": db_status,
@@ -99,7 +86,7 @@ async def readiness_probe(response: Response):
 
     # Визначаємо загальний статус
     is_healthy = all(c.status == "up" for c in components.values())
-    
+
     # Якщо хоча б один компонент лежить - повертаємо 503
     if not is_healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -113,5 +100,5 @@ async def readiness_probe(response: Response):
         version=VERSION,
         uptime_seconds=round(time.time() - START_TIME, 2),
         timestamp=get_utc_now().isoformat(),
-        components=components
+        components=components,
     )

@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import AliasPath, BaseModel, ConfigDict, Field, computed_field
 
-from src.models.base import CampaignDeliveryStatus, CampaignStatus
+from src.models.base import CampaignStatus, MessageStatus
 
 from .base import TimestampMixin, UUIDMixin
 
@@ -13,10 +13,8 @@ class CampaignCreate(BaseModel):
     """Campaign creation schema"""
 
     name: str = Field(..., min_length=1, max_length=255)
-    message_type: Literal["text", "template"] = "template"
     template_id: UUID | None = None
     waba_phone_id: UUID | None = None
-    message_body: str | None = None
     variable_mapping: dict[str, str] | None = None
 
     model_config = ConfigDict(
@@ -34,9 +32,7 @@ class CampaignUpdate(BaseModel):
     """Campaign update schema"""
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    message_type: Literal["text", "template"] | None = None
     template_id: UUID | None = None
-    message_body: str | None = None
     variable_mapping: dict[str, str] | None = None
 
 
@@ -53,19 +49,21 @@ class CampaignSchedule(BaseModel):
 
 
 class CampaignResponse(UUIDMixin, TimestampMixin):
-    """Full information about the campaign"""
-
     name: str
     status: CampaignStatus
-    message_type: str
     template_id: UUID | None = None
     waba_phone_id: UUID | None = None
-    message_body: str | None = None
     variable_mapping: dict[str, str] | None = None
+
+    # Інформація про дати
     scheduled_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class CampaignStatsResponse(CampaignResponse):
     total_contacts: int
     sent_count: int
     delivered_count: int
@@ -73,33 +71,59 @@ class CampaignResponse(UUIDMixin, TimestampMixin):
     replied_count: int = 0
     failed_count: int
 
-    # Автоматичний розрахунок прогресу при серіалізації
     @computed_field
     def progress_percent(self) -> float:
         if self.total_contacts == 0:
             return 0.0
-        return round((self.sent_count / self.total_contacts) * 100, 2)
+        processed = self.delivered_count + self.failed_count
+        return round((processed / self.total_contacts) * 100, 2)
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        use_enum_values=True,  # Serialize enum as values, not names
-        json_schema_extra={
-            "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "name": "Black Friday",
-                "status": "running",
-                "message_type": "template",
-                "total_contacts": 1000,
-                "sent_count": 750,
-                "delivered_count": 700,
-                "read_count": 500,
-                "replied_count": 50,
-                "failed_count": 50,
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-15T10:30:00Z",
-            }
-        },
+
+class CampaignListResponse(UUIDMixin, TimestampMixin):
+    name: str
+    status: CampaignStatus
+    scheduled_at: datetime | None = None
+    template_id: UUID | None = None
+
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class CampaignContactResponse(BaseModel):
+    id: UUID
+    contact_id: UUID
+    phone_number: str = Field(validation_alias=AliasPath("contact", "phone_number"))
+    name: str | None = Field(
+        default=None, validation_alias=AliasPath("contact", "name")
     )
+    custom_data: dict[str, Any] = Field(
+        default_factory=dict, validation_alias=AliasPath("contact", "custom_data")
+    )
+    retry_count: int
+
+    message: Any | None = Field(default=None, exclude=True)
+
+    @computed_field
+    def status(self) -> str:
+        msg = getattr(self, "message", None)
+        if msg and msg.status:
+            if hasattr(msg.status, "value"):
+                return str(msg.status.value)
+            return str(msg.status)
+        return "queued"
+
+    @computed_field
+    def error_code(self) -> int | None:
+        if self.message:
+            return self.message.error_code
+        return None
+
+    @computed_field
+    def error_message(self) -> str | None:
+        if self.message:
+            return self.message.error_message
+        return None
+
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 class CampaignContactUpdate(BaseModel):
@@ -107,46 +131,7 @@ class CampaignContactUpdate(BaseModel):
 
     name: str | None = None
     custom_data: dict[str, Any] | None = None
-    status: CampaignDeliveryStatus | None = None
-
-
-class CampaignContactResponse(BaseModel):
-    """Contact information in the campaign"""
-
-    id: UUID
-    contact_id: UUID
-    phone_number: str = Field(
-        validation_alias=AliasPath("contact", "phone_number"))
-    name: str | None = Field(
-        default=None, validation_alias=AliasPath("contact", "name")
-    )
-    custom_data: dict[str, Any] = Field(
-        default_factory=dict, validation_alias=AliasPath(
-            "contact", "custom_data")
-    )
-    status: CampaignDeliveryStatus
-    retry_count: int
-    message_error_code: int | None = Field(
-        default=None, validation_alias=AliasPath("message", "error_code")
-    )
-    message_error_message: str | None = Field(
-        default=None, validation_alias=AliasPath("message", "error_message")
-    )
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_schema_extra={
-            "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "contact_id": "789e4567-e89b-12d3-a456-426614174000",
-                "phone_number": "380671234567",
-                "name": "John Doe",
-                "status": "sent",
-                "error_message": None,
-                "retry_count": 0,
-            }
-        },
-    )
+    status: MessageStatus | None = None
 
 
 class CampaignStartResponse(BaseModel):

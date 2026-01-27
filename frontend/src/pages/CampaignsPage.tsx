@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { apiClient } from "../api";
 import {
   CampaignResponse,
+  CampaignListResponse,
   CampaignCreate,
   CampaignUpdate,
-  CampaignStats,
+  CampaignStatsResponse,
   CampaignSchedule,
   CampaignContactResponse,
   ContactImport,
   CampaignStatus,
   ContactStatus,
+  MessageType,
+  CampaignStats,
 } from "../types";
 import CampaignList from "../components/campaigns/CampaignList";
 import CampaignDetails from "../components/campaigns/CampaignDetails";
@@ -32,10 +36,13 @@ const CAMPAIGN_TABS: {
   ];
 
 const CampaignsPage: React.FC = () => {
-  const [campaigns, setCampaigns] = useState<CampaignResponse[]>([]);
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [campaigns, setCampaigns] = useState<CampaignListResponse[]>([]);
   const [selectedCampaign, setSelectedCampaign] =
     useState<CampaignResponse | null>(null);
-  const [campaignStats, setCampaignStats] = useState<CampaignStats | null>(
+  const [campaignStats, setCampaignStats] = useState<CampaignStatsResponse | null>(
     null,
   );
   const [campaignContacts, setCampaignContacts] = useState<
@@ -54,8 +61,8 @@ const CampaignsPage: React.FC = () => {
     [activeTab],
   );
 
-  const sortCampaigns = useCallback((items: CampaignResponse[]) => {
-    const getTimestamp = (campaign: CampaignResponse) => {
+  const sortCampaigns = useCallback((items: CampaignListResponse[]) => {
+    const getTimestamp = (campaign: CampaignListResponse) => {
       const date = campaign.updated_at || campaign.created_at;
       return date ? new Date(date).getTime() : 0;
     };
@@ -79,23 +86,6 @@ const CampaignsPage: React.FC = () => {
     loadCampaigns();
   }, [loadCampaigns]);
 
-  useEffect(() => {
-    if (selectedCampaign) {
-      loadCampaignDetails(selectedCampaign.id);
-    }
-  }, [selectedCampaign]);
-
-  useEffect(() => {
-    if (
-      selectedCampaign &&
-      !campaigns.some((c) => c.id === selectedCampaign.id)
-    ) {
-      setSelectedCampaign(null);
-      setCampaignStats(null);
-      setCampaignContacts([]);
-    }
-  }, [campaigns, selectedCampaign]);
-
   // WebSocket event handlers for real-time campaign updates
   const handleCampaignUpdate = useCallback(
     (data: any) => {
@@ -107,10 +97,7 @@ const CampaignsPage: React.FC = () => {
             ? {
               ...campaign,
               status: data.status,
-              // Update counts if provided in the event
-              sent_count: data.sent !== undefined ? data.sent : campaign.sent_count,
-              delivered_count: data.delivered !== undefined ? data.delivered : campaign.delivered_count,
-              failed_count: data.failed !== undefined ? data.failed : campaign.failed_count,
+              // Note: List view no longer has stats, so we only update status
             }
             : campaign,
         );
@@ -119,16 +106,19 @@ const CampaignsPage: React.FC = () => {
           ? updated.filter((campaign) => campaign.status === statusFilter)
           : updated;
 
-        // Update selected campaign from the updated list
+        // Update selected campaign status if needed
         if (selectedCampaign?.id === data.campaign_id) {
-          const updatedCampaign = updated.find(c => c.id === data.campaign_id);
-          if (updatedCampaign) {
-            setSelectedCampaign(updatedCampaign);
-          }
+          // We might want to reload full details here, but for now just optional state update if simple field
+          // Ideally we re-fetch to be safe
         }
 
         return sortCampaigns(filtered);
       });
+
+      // If selected campaign is updated, reload details
+      if (selectedCampaign && selectedCampaign.id === data.campaign_id) {
+        loadCampaignDetails(selectedCampaign.id);
+      }
     },
     [selectedCampaign, sortCampaigns, statusFilter],
   );
@@ -154,6 +144,7 @@ const CampaignsPage: React.FC = () => {
               delivered_count: data.delivered,
               failed_count: data.failed,
               progress_percent: data.progress_percent,
+              total_contacts: prev.total_contacts, // Ensure we keep other fields
             }
             : null,
         );
@@ -181,11 +172,8 @@ const CampaignsPage: React.FC = () => {
               contact.contact_id === data.contact_id
                 ? {
                   ...contact,
-                  status: data.status === "sent" || data.status === "delivered"
-                    ? ContactStatus.SENT
-                    : data.status === "failed"
-                      ? ContactStatus.FAILED
-                      : contact.status,
+                  // Map backend status to UI status if needed, or just use string
+                  status: data.status,
                   retry_count: data.retry_count !== undefined ? data.retry_count : contact.retry_count,
                 }
                 : contact,
@@ -208,23 +196,41 @@ const CampaignsPage: React.FC = () => {
   useWSEvent(EventType.MESSAGE_DELIVERED, handleMessageStatusUpdate);
   useWSEvent(EventType.MESSAGE_FAILED, handleMessageStatusUpdate);
 
-  const loadCampaignDetails = async (campaignId: string) => {
+  const loadCampaignDetails = useCallback(async (campaignId: string) => {
     try {
-      const stats = await apiClient.getCampaignStats(campaignId);
-      setCampaignStats(stats);
+      // Parallel fetch
+      const [fullCampaign, stats, contacts] = await Promise.all([
+        apiClient.getCampaign(campaignId),
+        apiClient.getCampaignStats(campaignId),
+        apiClient.getCampaignContacts(campaignId, {
+          limit: CONTACTS_PER_PAGE,
+          offset: 0
+        })
+      ]);
 
-      // Load initial contacts
-      setContactsPage(1);
-      setLoadingContacts(true);
-      const contacts = await apiClient.getCampaignContacts(campaignId, {
-        limit: CONTACTS_PER_PAGE,
-        offset: 0
-      });
+      setSelectedCampaign(fullCampaign);
+      setCampaignStats(stats);
       setCampaignContacts(contacts);
+      setContactsPage(1);
     } catch (error) {
       console.error("Помилка завантаження деталей кампанії:", error);
-    } finally {
-      setLoadingContacts(false);
+      // Optional: navigate back if not found?
+    }
+  }, []);
+
+  useEffect(() => {
+    if (id) {
+      loadCampaignDetails(id);
+    } else {
+      setSelectedCampaign(null);
+      setCampaignStats(null);
+      setCampaignContacts([]);
+    }
+  }, [id, loadCampaignDetails]);
+
+  const handleSelectCampaign = (listCampaign: CampaignListResponse) => {
+    if (id !== listCampaign.id) {
+      navigate(`/campaigns/${listCampaign.id}`);
     }
   };
 
@@ -269,10 +275,8 @@ const CampaignsPage: React.FC = () => {
     try {
       await apiClient.updateCampaign(campaignId, data);
       await loadCampaigns();
-      if (selectedCampaign?.id === campaignId) {
-        const updated = await apiClient.getCampaign(campaignId);
-        setSelectedCampaign(updated);
-      }
+      // Reload details to get updated fields
+      await loadCampaignDetails(campaignId);
     } catch (error) {
       console.error("Помилка оновлення кампанії:", error);
       throw error;
@@ -287,6 +291,8 @@ const CampaignsPage: React.FC = () => {
       await apiClient.deleteCampaign(campaignId);
       if (selectedCampaign?.id === campaignId) {
         setSelectedCampaign(null);
+        setCampaignStats(null);
+        setCampaignContacts([]);
       }
       await loadCampaigns();
     } catch (error) {
@@ -302,10 +308,7 @@ const CampaignsPage: React.FC = () => {
       await apiClient.scheduleCampaign(campaignId, data);
       setShowScheduleForm(false);
       await loadCampaigns();
-      if (selectedCampaign?.id === campaignId) {
-        const updated = await apiClient.getCampaign(campaignId);
-        setSelectedCampaign(updated);
-      }
+      await loadCampaignDetails(campaignId);
     } catch (error) {
       console.error("Помилка планування кампанії:", error);
       throw error;
@@ -316,11 +319,6 @@ const CampaignsPage: React.FC = () => {
     try {
       await apiClient.startCampaign(campaignId);
       // Don't reload - WebSocket will handle updates
-      // await loadCampaigns();
-      // if (selectedCampaign?.id === campaignId) {
-      //   const updated = await apiClient.getCampaign(campaignId);
-      //   setSelectedCampaign(updated);
-      // }
     } catch (error) {
       console.error("Помилка запуску кампанії:", error);
     }
@@ -351,16 +349,8 @@ const CampaignsPage: React.FC = () => {
   ) => {
     try {
       await apiClient.addContactsManually(campaignId, contacts, forceAdd);
-      // Оновлюємо кампанію щоб отримати новий total_contacts
-      const updatedCampaign = await apiClient.getCampaign(campaignId);
-      setCampaigns(prev => prev.map(c =>
-        c.id === campaignId ? updatedCampaign : c
-      ));
-      if (selectedCampaign?.id === campaignId) {
-        setSelectedCampaign(updatedCampaign);
-      }
       await loadCampaignDetails(campaignId);
-      await loadCampaigns();
+      await loadCampaigns(); // To update list if status changes (unlikely for add contacts but good to sync)
     } catch (error) {
       console.error("Помилка додавання контактів:", error);
       throw error;
@@ -370,14 +360,6 @@ const CampaignsPage: React.FC = () => {
   const handleImportContacts = async (campaignId: string, file: File) => {
     try {
       await apiClient.importContactsFromFile(campaignId, file);
-      // Оновлюємо кампанію щоб отримати новий total_contacts
-      const updatedCampaign = await apiClient.getCampaign(campaignId);
-      setCampaigns(prev => prev.map(c =>
-        c.id === campaignId ? updatedCampaign : c
-      ));
-      if (selectedCampaign?.id === campaignId) {
-        setSelectedCampaign(updatedCampaign);
-      }
       await loadCampaignDetails(campaignId);
       await loadCampaigns();
     } catch (error) {
@@ -410,7 +392,7 @@ const CampaignsPage: React.FC = () => {
     try {
       await apiClient.deleteCampaignContact(campaignId, contactId);
       await loadCampaignDetails(campaignId);
-      await loadCampaigns();
+      // List might not change
     } catch (error) {
       console.error("Помилка видалення контакту кампанії:", error);
       throw error;
@@ -467,8 +449,8 @@ const CampaignsPage: React.FC = () => {
           ) : (
             <CampaignList
               campaigns={campaigns}
-              selectedCampaign={selectedCampaign}
-              onSelectCampaign={setSelectedCampaign}
+              selectedCampaign={selectedCampaign as unknown as CampaignListResponse}
+              onSelectCampaign={handleSelectCampaign}
               onDeleteCampaign={handleDeleteCampaign}
             />
           )}
@@ -493,7 +475,7 @@ const CampaignsPage: React.FC = () => {
               showScheduleForm={showScheduleForm}
               onShowScheduleForm={setShowScheduleForm}
               currentPage={contactsPage}
-              totalPages={Math.ceil((selectedCampaign?.total_contacts || 0) / CONTACTS_PER_PAGE)}
+              totalPages={Math.ceil((campaignStats?.total_contacts || 0) / CONTACTS_PER_PAGE)}
               onPageChange={handlePageChange}
               loadingContacts={loadingContacts}
             />

@@ -9,7 +9,6 @@ from src.repositories.contact import ContactRepository
 from src.repositories.template import TemplateRepository
 from src.services.campaign.executor import CampaignMessageExecutor
 from src.services.campaign.lifecycle import CampaignLifecycleManager
-from src.services.campaign.tracker import CampaignProgressTracker
 from src.services.messaging.sender import MessageSenderService
 from src.services.notifications.service import NotificationService
 
@@ -27,7 +26,6 @@ class CampaignSenderService:
         notifier: NotificationService,
     ):
         self.session = session
-        self.trackers: dict[str, CampaignProgressTracker] = {}
 
         # Initialize repositories
         campaigns_repo = CampaignRepository(session)
@@ -36,9 +34,7 @@ class CampaignSenderService:
         template_repo = TemplateRepository(session)
 
         # Initialize sub-services
-        self.lifecycle = CampaignLifecycleManager(
-            session, campaigns_repo, notifier, self.trackers
-        )
+        self.lifecycle = CampaignLifecycleManager(session, campaigns_repo, notifier)
         self.executor = CampaignMessageExecutor(
             session,
             campaigns_repo,
@@ -47,7 +43,6 @@ class CampaignSenderService:
             template_repo,
             message_sender,
             notifier,
-            self.trackers,
         )
         self.campaigns = campaigns_repo
 
@@ -57,7 +52,6 @@ class CampaignSenderService:
         """Start a campaign."""
         campaign = await self._get_campaign_or_raise(campaign_id)
         await self.lifecycle.start_campaign(campaign)
-        await self.executor._notify_progress(campaign)
 
     async def send_single_message(
         self, campaign_id: UUID, link_id: UUID, contact_id: UUID
@@ -69,8 +63,7 @@ class CampaignSenderService:
         try:
             success = await self.executor.send_message(campaign_id, link_id, contact_id)
         except Exception as e:
-            logger.warning(
-                f"Failed to send campaign message to {contact_id}: {e}")
+            logger.warning(f"Failed to send campaign message to {contact_id}: {e}")
             await self.executor.handle_send_failure(campaign_id, link_id, str(e))
             success = False
         finally:
@@ -86,13 +79,6 @@ class CampaignSenderService:
         """Resume a paused campaign."""
         campaign = await self._get_campaign_or_raise(campaign_id)
         await self.lifecycle.resume_campaign(campaign)
-
-    async def notify_batch_progress(
-        self, campaign_id: UUID, batch_number: int, stats: dict
-    ):
-        """Notify about batch processing progress."""
-        # Could be moved to notifier if needed
-        pass
 
     # ==================== Helper Methods ====================
 

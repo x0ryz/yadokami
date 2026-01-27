@@ -11,7 +11,6 @@ from src.core.exceptions import BadRequestError, NotFoundError
 from src.models import Contact
 from src.models.base import ContactStatus
 from src.repositories.contact import ContactRepository
-from src.repositories.tag import TagRepository
 from src.schemas import MessageResponse
 from src.schemas.contacts import (
     ContactCreate,
@@ -32,7 +31,9 @@ async def get_contacts(
     tags: list[UUID] | None = Query(default=None),
     status: ContactStatus | None = Query(default=None),
     all: bool = Query(
-        default=False, description="Показати всі контакти (включно з тими, у кого немає тегів)"),
+        default=False,
+        description="Показати всі контакти (включно з тими, у кого немає тегів)",
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     """Get all contacts sorted by unread count and last activity
@@ -43,8 +44,11 @@ async def get_contacts(
     show_only_with_tags = not all
 
     contacts = await ContactRepository(session).get_paginated(
-        limit, offset, tag_ids=tags, status=status,
-        show_only_with_tags=show_only_with_tags
+        limit,
+        offset,
+        tag_ids=tags,
+        status=status,
+        show_only_with_tags=show_only_with_tags,
     )
     return contacts
 
@@ -145,7 +149,10 @@ async def import_contacts(
 
             # Create contact
             contact_data = ContactCreate(
-                phone_number=phone_digits, name=name, custom_data=custom_data, tag_ids=[]
+                phone_number=phone_digits,
+                name=name,
+                custom_data=custom_data,
+                tag_ids=[],
             )
 
             await repo.create_manual(contact_data)
@@ -244,7 +251,7 @@ async def get_available_fields(
     for contact in contacts:
         if contact.custom_data:
             custom_fields_set.update(contact.custom_data.keys())
-    
+
     custom_fields = sorted(list(custom_fields_set))
 
     return {

@@ -1,16 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import selectinload
-from src.core.config import settings
+
 from src.models import (
     Campaign,
     CampaignContact,
-    CampaignDeliveryStatus,
     CampaignStatus,
     get_utc_now,
 )
+from src.models.base import MessageStatus
+from src.models.messages import Message
 from src.repositories.base import BaseRepository
 
 
@@ -41,20 +42,64 @@ class CampaignRepository(BaseRepository[Campaign]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_with_status(
-        self, status: CampaignStatus | None = None
-    ) -> list[Campaign]:
-        stmt = select(Campaign)
-        if status:
-            stmt = stmt.where(Campaign.status == status)
-
-        stmt = stmt.order_by(
-            Campaign.scheduled_at.desc(),
-            Campaign.created_at.desc(),
+    async def get_stats_by_id(self, campaign_id: UUID) -> dict | None:
+        """
+        Отримує детальну статистику для однієї кампанії.
+        """
+        stmt = (
+            select(
+                Campaign,
+                func.count(CampaignContact.id).label("total_contacts"),
+                func.count(case((Message.status == MessageStatus.SENT, 1))).label(
+                    "sent_count"
+                ),
+                func.count(case((Message.status == MessageStatus.DELIVERED, 1))).label(
+                    "delivered_count"
+                ),
+                func.count(case((Message.status == MessageStatus.READ, 1))).label(
+                    "read_count"
+                ),
+                func.count(case((Message.status == MessageStatus.FAILED, 1))).label(
+                    "failed_count"
+                ),
+            )
+            .select_from(Campaign)
+            .outerjoin(CampaignContact, Campaign.id == CampaignContact.campaign_id)
+            .outerjoin(Message, CampaignContact.message_id == Message.id)
+            .where(Campaign.id == campaign_id)  # <--- Фільтруємо по ID
+            .group_by(Campaign.id)
         )
 
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        row = result.first()
+
+        if not row:
+            return None
+
+        campaign, total, sent, delivered, read, failed = row
+
+        camp_dict = {
+            c.name: getattr(campaign, c.name) for c in campaign.__table__.columns
+        }
+
+        # Обчислюємо message_type
+        if campaign.template_id:
+            camp_dict["message_type"] = "template"
+        else:
+            camp_dict["message_type"] = "text"
+
+        camp_dict.update(
+            {
+                "total_contacts": total,
+                "sent_count": sent,
+                "delivered_count": delivered,
+                "read_count": read,
+                "failed_count": failed,
+                "replied_count": 0,
+            }
+        )
+
+        return camp_dict
 
     async def update_stats(
         self,
@@ -82,8 +127,16 @@ class CampaignRepository(BaseRepository[Campaign]):
         return result.scalar() or 0
 
     async def get_recent(self, limit: int) -> list[Campaign]:
-        stmt = select(Campaign).order_by(
-            desc(Campaign.updated_at)).limit(limit)
+        stmt = select(Campaign).order_by(desc(Campaign.updated_at)).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_basic(self, status: CampaignStatus | None = None) -> list[Campaign]:
+        stmt = select(Campaign).order_by(Campaign.created_at.desc())
+
+        if status:
+            stmt = stmt.where(Campaign.status == status)
+
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -106,23 +159,20 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
     async def get_sendable_contacts(
         self, campaign_id: UUID, limit: int = 500, offset: int = 0
     ) -> list[CampaignContact]:
-        # Get contacts that are QUEUED (not yet attempted)
-        # Note: We don't include FAILED contacts for retry because we don't
-        # have a mechanism to republish them to the NATS queue
         stmt = (
             select(CampaignContact)
             .where(
                 CampaignContact.campaign_id == campaign_id,
-                CampaignContact.status == CampaignDeliveryStatus.QUEUED,
+                CampaignContact.message_id.is_(None),
             )
             .options(selectinload(CampaignContact.contact))
-            .offset(offset)
+            .with_for_update(skip_locked=True)
             .limit(limit)
+            .offset(offset)
         )
 
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
-
 
     async def get_campaign_contacts(
         self, campaign_id: UUID, limit: int = 100, offset: int = 0
@@ -132,7 +182,7 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
             .where(CampaignContact.campaign_id == campaign_id)
             .options(
                 selectinload(CampaignContact.contact),
-                selectinload(CampaignContact.message)
+                selectinload(CampaignContact.message),
             )
             .offset(offset)
             .limit(limit)
@@ -141,11 +191,15 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_by_status(
-        self, campaign_id: UUID, status: CampaignDeliveryStatus
-    ) -> int:
-        stmt = select(func.count()).where(
-            CampaignContact.campaign_id == campaign_id, CampaignContact.status == status
+    async def count_by_status(self, campaign_id: UUID, status: MessageStatus) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(CampaignContact)
+            .join(CampaignContact.message)
+            .where(
+                CampaignContact.campaign_id == campaign_id,
+                Message.status == status,
+            )
         )
         result = await self.session.execute(stmt)
         return result.scalar() or 0
@@ -163,8 +217,7 @@ class CampaignContactRepository(BaseRepository[CampaignContact]):
         return result.scalar() is not None
 
     async def count_all(self, campaign_id: UUID) -> int:
-        stmt = select(func.count()).where(
-            CampaignContact.campaign_id == campaign_id)
+        stmt = select(func.count()).where(CampaignContact.campaign_id == campaign_id)
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 

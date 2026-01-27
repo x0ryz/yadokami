@@ -118,47 +118,32 @@ export interface DuplicateCheckResult {
 }
 
 // Campaign Types
+// Campaign Types
 export interface CampaignResponse {
   id: string;
   name: string;
   status: CampaignStatus;
-  message_type: string;
   template_id: string | null;
-  message_body: string | null;
+  waba_phone_id: string | null;
+  variable_mapping: Record<string, string> | null;
   scheduled_at: string | null;
   started_at: string | null;
   completed_at: string | null;
-  total_contacts: number;
-  sent_count: number;
-  delivered_count: number;
-  read_count: number;
-  replied_count: number;
-  failed_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface CampaignCreate {
-  name: string;
-  message_type?: MessageType;
-  template_id?: string | null;
-  waba_phone_id?: string | null;
-  message_body?: string | null;
-  variable_mapping?: Record<string, string> | null;
-}
-
-export interface CampaignUpdate {
-  name?: string | null;
-  message_type?: MessageType | null;
-  template_id?: string | null;
-  message_body?: string | null;
-  variable_mapping?: Record<string, string> | null;
-}
-
-export interface CampaignStats {
+export interface CampaignListResponse {
   id: string;
   name: string;
   status: CampaignStatus;
+  scheduled_at: string | null;
+  template_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignStatsResponse extends CampaignResponse {
   total_contacts: number;
   sent_count: number;
   delivered_count: number;
@@ -166,12 +151,24 @@ export interface CampaignStats {
   replied_count: number;
   failed_count: number;
   progress_percent: number;
-  scheduled_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
 }
+
+export interface CampaignCreate {
+  name: string;
+  template_id?: string | null;
+  waba_phone_id?: string | null;
+  variable_mapping?: Record<string, string> | null;
+}
+
+export interface CampaignUpdate {
+  name?: string | null;
+  template_id?: string | null;
+  variable_mapping?: Record<string, string> | null;
+}
+
+// Stats interface for Dashboard or legacy support if needed, 
+// strictly speaking CampaignStatsResponse replaces it but we keep alias if convenient
+export type CampaignStats = CampaignStatsResponse;
 
 export interface CampaignSchedule {
   scheduled_at: string; // ISO 8601 datetime
@@ -183,17 +180,16 @@ export interface CampaignContactResponse {
   phone_number: string;
   name: string | null;
   custom_data: Record<string, any>;
-  status: ContactStatus;
-  last_sent_at: string | null;
   retry_count: number;
-  message_error_code?: number | null;
-  message_error_message?: string | null;
+  status: string; // computed on backend
+  error_code: number | null; // computed
+  error_message: string | null; // computed
 }
 
 export interface CampaignContactUpdate {
   name?: string | null;
-  custom_data?: Record<string, any>;
-  status?: ContactStatus;
+  custom_data?: Record<string, any> | null;
+  status?: MessageStatus | null;
 }
 
 // Message Types

@@ -21,6 +21,7 @@ from src.schemas import (
     ContactImport,
     ContactImportResult,
 )
+from src.schemas.campaigns import CampaignListResponse, CampaignStatsResponse
 from src.services.campaign.importer import ContactImportService
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
@@ -35,16 +36,6 @@ async def create_campaign(
     campaign_repo = CampaignRepository(session)
     template_repo = TemplateRepository(session)
 
-    if data.message_type == "template" and not data.template_id:
-        raise BadRequestError(
-            detail="template_id is required when message_type is 'template'"
-        )
-
-    if data.message_type == "text" and not data.message_body:
-        raise BadRequestError(
-            detail="message_body is required when message_type is 'text'",
-        )
-
     if data.template_id:
         template = await template_repo.get_by_id(data.template_id)
         if not template:
@@ -58,10 +49,8 @@ async def create_campaign(
 
     campaign = await campaign_repo.create(
         name=data.name,
-        message_type=data.message_type,
         template_id=data.template_id,
         waba_phone_id=data.waba_phone_id,
-        message_body=data.message_body,
         variable_mapping=data.variable_mapping,
         status=CampaignStatus.DRAFT,
     )
@@ -72,7 +61,7 @@ async def create_campaign(
     return campaign
 
 
-@router.get("", response_model=list[CampaignResponse])
+@router.get("", response_model=list[CampaignListResponse])
 async def list_campaigns(
     status: CampaignStatus | None = None,
     session: AsyncSession = Depends(get_session),
@@ -81,7 +70,7 @@ async def list_campaigns(
     List campaigns.
     Progress percent will be automatically calculated for each item.
     """
-    campaigns = await CampaignRepository(session).list_with_status(status=status)
+    campaigns = await CampaignRepository(session).list_basic(status=status)
     return campaigns
 
 
@@ -166,16 +155,12 @@ async def schedule_campaign(
             detail="Can only schedule campaigns in DRAFT status",
         )
 
-    if campaign.total_contacts == 0:
-        # Fallback: Double check actual count in case of sync issues
-        actual_count = await contact_repo.count_all(campaign_id)
-        if actual_count > 0:
-            campaign.total_contacts = actual_count
-            session.add(campaign)
-        else:
-            raise BadRequestError(
-                detail="Cannot schedule campaign with no contacts",
-            )
+    actual_count = await contact_repo.count_all(campaign_id)
+
+    if actual_count == 0:
+        raise BadRequestError(
+            detail="Cannot schedule campaign with no contacts",
+        )
 
     now = get_utc_now()
     if data.scheduled_at <= now:
@@ -207,32 +192,45 @@ async def start_campaign_now(
     if not campaign:
         raise NotFoundError(detail="Campaign not found")
 
-    if campaign.status not in [CampaignStatus.DRAFT, CampaignStatus.SCHEDULED]:
+    if campaign.status not in [
+        CampaignStatus.DRAFT,
+        CampaignStatus.SCHEDULED,
+        CampaignStatus.PAUSED,
+    ]:
         raise BadRequestError(
-            detail="Can only start campaigns in DRAFT or SCHEDULED status",
+            detail="Can only start campaigns in DRAFT, SCHEDULED or PAUSED status",
         )
 
-    if campaign.total_contacts == 0:
-        actual_count = await contact_repo.count_all(campaign_id)
-        if actual_count > 0:
-            campaign.total_contacts = actual_count
-            session.add(campaign)
-        else:
-            raise BadRequestError(
-                detail="Cannot start campaign with no contacts",
-            )
+    actual_count = await contact_repo.count_all(campaign_id)
+
+    if actual_count == 0:
+        raise BadRequestError(
+            detail="Cannot start campaign with no contacts. Please import contacts first.",
+        )
+
+    campaign.status = CampaignStatus.RUNNING
+    campaign.started_at = get_utc_now()
+
+    session.add(campaign)
+    await session.commit()
+    await session.refresh(campaign)
 
     try:
-        # Publish campaign start event to NATS
         await broker.publish(
             str(campaign_id),
             subject="campaigns.start",
             stream="campaigns",
         )
         logger.info(f"Campaign start published: {campaign_id}")
+
     except Exception as e:
         logger.error(f"Failed to publish campaign start: {e}")
-        raise ServiceUnavailableError(detail="Failed to start campaign")
+
+        campaign.status = CampaignStatus.FAILED
+        session.add(campaign)
+        await session.commit()
+
+        raise ServiceUnavailableError(detail="Failed to start campaign (Broker error)")
 
     return campaign
 
@@ -285,6 +283,12 @@ async def resume_campaign(
     if campaign.status != CampaignStatus.PAUSED:
         raise BadRequestError(detail="Can only resume paused campaigns")
 
+    # Optimistically set status to RUNNING
+    campaign.status = CampaignStatus.RUNNING
+    campaign.updated_at = get_utc_now()
+    session.add(campaign)
+    await session.commit()
+
     try:
         await broker.publish(
             str(campaign_id),
@@ -294,12 +298,16 @@ async def resume_campaign(
         logger.info(f"Campaign resume published: {campaign_id}")
     except Exception as e:
         logger.error(f"Failed to publish campaign resume: {e}")
+        # Revert status if broker fails
+        campaign.status = CampaignStatus.PAUSED
+        session.add(campaign)
+        await session.commit()
         raise ServiceUnavailableError(detail="Failed to resume campaign")
 
     return campaign
 
 
-@router.get("/{campaign_id}/stats", response_model=CampaignResponse)
+@router.get("/{campaign_id}/stats", response_model=CampaignStatsResponse)
 async def get_campaign_stats(
     campaign_id: UUID,
     session: AsyncSession = Depends(get_session),
@@ -307,7 +315,7 @@ async def get_campaign_stats(
     """
     Get detailed campaign statistics.
     """
-    campaign = await CampaignRepository(session).get_by_id(campaign_id)
+    campaign = await CampaignRepository(session).get_stats_by_id(campaign_id)
     if not campaign:
         raise NotFoundError(detail="Campaign not found")
 
@@ -354,8 +362,7 @@ async def import_contacts_from_file(
     result = await import_service.import_file(campaign_id, content, file.filename)
 
     if result.errors and any("Unsupported file format" in e for e in result.errors):
-        raise BadRequestError(
-            detail="Unsupported file format. Use .csv, .xlsx or .xls")
+        raise BadRequestError(detail="Unsupported file format. Use .csv, .xlsx or .xls")
 
     logger.info(
         f"Import completed for campaign {campaign_id}: "
@@ -413,11 +420,12 @@ async def add_contacts_manually(
 
 
 @router.patch(
-    "/{campaign_id}/contacts/{contact_id}", response_model=CampaignContactResponse
+    "/{campaign_id}/contacts/{campaign_contact_id}",
+    response_model=CampaignContactResponse,
 )
 async def update_campaign_contact(
     campaign_id: UUID,
-    contact_id: UUID,
+    campaign_contact_id: UUID,
     data: CampaignContactUpdate,
     session: AsyncSession = Depends(get_session),
 ):
@@ -434,7 +442,7 @@ async def update_campaign_contact(
     campaign_contact_repo = CampaignContactRepository(session)
 
     # Get campaign contact
-    campaign_contact = await campaign_contact_repo.get_by_id(contact_id)
+    campaign_contact = await campaign_contact_repo.get_by_id(campaign_contact_id)
     if not campaign_contact or campaign_contact.campaign_id != campaign_id:
         raise NotFoundError(detail="Contact not found in this campaign")
 
@@ -457,22 +465,25 @@ async def update_campaign_contact(
             contact.custom_data = update_data["custom_data"]
             session.add(contact)
 
-    # Update campaign contact status if provided
-    if "status" in update_data:
-        campaign_contact = await campaign_contact_repo.update(contact_id, status=update_data["status"])
+    # Status update was removed because CampaignContact has no status column.
+    # Status is derived from the message.
 
     await session.commit()
     await session.refresh(campaign_contact, ["contact"])
 
     logger.info(
-        f"Campaign contact updated: {contact_id} in campaign {campaign_id}")
+        f"Campaign contact updated: {campaign_contact_id} in campaign {campaign_id}"
+    )
     return campaign_contact
 
 
-@router.delete("/{campaign_id}/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{campaign_id}/contacts/{campaign_contact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_campaign_contact(
     campaign_id: UUID,
-    contact_id: UUID,
+    campaign_contact_id: UUID,
     session: AsyncSession = Depends(get_session),
 ):
     """Delete campaign contact."""
@@ -487,21 +498,18 @@ async def delete_campaign_contact(
 
     campaign_contact_repo = CampaignContactRepository(session)
 
-    # Get campaign contact
-    campaign_contact = await campaign_contact_repo.get_by_id(contact_id)
+    # Check existence
+    campaign_contact = await campaign_contact_repo.get_by_id(campaign_contact_id)
     if not campaign_contact or campaign_contact.campaign_id != campaign_id:
         raise NotFoundError(detail="Contact not found in this campaign")
 
-    deleted = await campaign_contact_repo.delete_by_id(contact_id)
+    deleted = await campaign_contact_repo.delete_by_id(campaign_contact_id)
     if not deleted:
         raise NotFoundError(detail="Failed to delete contact")
-
-    # Update campaign total_contacts count
-    campaign.total_contacts = await campaign_contact_repo.count_all(campaign_id)
-    session.add(campaign)
 
     await session.commit()
 
     logger.info(
-        f"Campaign contact deleted: {contact_id} from campaign {campaign_id}")
+        f"Campaign contact deleted: {campaign_contact_id} from campaign {campaign_id}"
+    )
     return None

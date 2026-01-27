@@ -25,6 +25,7 @@ function App() {
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/templates/:id" element={<TemplateDetailPage />} />
           <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="/campaigns/:id" element={<CampaignsPage />} />
           <Route path="/quick-replies" element={<QuickRepliesPage />} />
           <Route path="/quick-replies/:id" element={<QuickReplyDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -213,12 +213,16 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
     "overview",
   );
 
+  // ... inside component ...
+  const messageType = campaign.template_id ? "template" : "text"; // Inferred
+  const totalContacts = stats?.total_contacts || 0;
+
   const canEdit = campaign.status === CampaignStatus.DRAFT;
   const canSchedule = campaign.status === CampaignStatus.DRAFT;
   const canStart =
     (campaign.status === CampaignStatus.DRAFT ||
       campaign.status === CampaignStatus.SCHEDULED) &&
-    campaign.total_contacts > 0;
+    totalContacts > 0;
   const canPause = campaign.status === CampaignStatus.RUNNING;
   const canResume = campaign.status === CampaignStatus.PAUSED;
 
@@ -249,7 +253,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
               </span>
               <span>
                 <span className="font-medium">Тип:</span>{" "}
-                {campaign.message_type}
+                {messageType === "template" ? "Шаблон" : "Текст"}
               </span>
             </div>
           </div>
@@ -320,7 +324,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
               : "border-transparent text-gray-600 hover:text-gray-900"
               }`}
           >
-            Контакти ({campaign.total_contacts})
+            Контакти ({totalContacts})
           </button>
         </div>
       </div>
@@ -331,9 +335,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           <div className="space-y-6">
             {/* Message Preview Section */}
             <MessagePreview
-              messageType={campaign.message_type}
+              messageType={messageType}
               templateId={campaign.template_id}
-              messageBody={campaign.message_body}
+              messageBody={null}
             />
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
@@ -345,7 +349,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                   Тип повідомлення:
                 </span>
                 <span className="ml-2 text-gray-900">
-                  {campaign.message_type}
+                  {messageType === "template" ? "Шаблон" : "Текст"}
                 </span>
               </div>
               {campaign.template_id && (
@@ -356,16 +360,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                   </span>
                 </div>
               )}
-              {campaign.message_body && (
-                <div>
-                  <span className="font-medium text-gray-700">
-                    Текст повідомлення:
-                  </span>
-                  <p className="mt-1 text-gray-900 bg-white p-3 rounded border">
-                    {campaign.message_body}
-                  </p>
-                </div>
-              )}
+              {/* Message Body is no longer available directly on campaign */}
               {campaign.scheduled_at && (
                 <div>
                   <span className="font-medium text-gray-700">
@@ -442,7 +437,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                     {contacts.map((contact) => {
                       const isExpanded = expandedContactId === contact.id;
                       const hasCustomData = contact.custom_data && Object.keys(contact.custom_data).length > 0;
-                      const hasError = contact.message_error_message;
+                      const hasError = contact.error_message;
                       const hasExpandableContent = hasCustomData || hasError;
 
                       return (
@@ -505,9 +500,9 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                                     <div className={hasCustomData ? "mb-4" : ""}>
                                       <h4 className="text-sm font-semibold text-red-700 mb-2">Помилка відправки:</h4>
                                       <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                        <p className="text-sm text-red-800">{contact.message_error_message}</p>
-                                        {contact.message_error_code && (
-                                          <p className="text-xs text-red-600 mt-1">Код помилки: {contact.message_error_code}</p>
+                                        <p className="text-sm text-red-800">{contact.error_message}</p>
+                                        {contact.error_code && (
+                                          <p className="text-xs text-red-600 mt-1">Код помилки: {contact.error_code}</p>
                                         )}
                                       </div>
                                     </div>
@@ -603,9 +598,7 @@ const CampaignDetails: React.FC<CampaignDetailsProps> = ({
             <CampaignForm
               initialData={{
                 name: campaign.name,
-                message_type: campaign.message_type as MessageType,
                 template_id: campaign.template_id,
-                message_body: campaign.message_body,
               }}
               onSubmit={handleUpdate}
               onCancel={() => setShowEditForm(false)}

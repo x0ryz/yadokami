@@ -88,13 +88,12 @@ class NotificationService:
         )
         await self._publish(event.to_dict())
 
-    async def notify_campaign_progress(self, campaign_id: UUID, stats: dict):
+    async def notify_campaign_progress(self, campaign_id: UUID, **stats):
         event = CampaignProgressEvent(campaign_id=campaign_id, **stats)
         await self._publish(event.to_dict())
 
     async def notify_campaign_status(self, campaign_id: UUID, status: str, **kwargs):
-        event = CampaignStatusEvent(
-            campaign_id=campaign_id, status=status, **kwargs)
+        event = CampaignStatusEvent(campaign_id=campaign_id, status=status, **kwargs)
         await self._publish(event.to_dict())
 
     async def notify_batch_progress(
@@ -134,10 +133,11 @@ class NotificationService:
             "timestamp": get_utc_now().isoformat(),
         }
         await self._publish(event)
-        
+
         # Notify Telegram Admin Group
         from src.clients.telegram import telegram_client
         from src.core.config import settings
+
         if settings.TG_ADMIN_GROUP_ID:
             msg = (
                 f"📝 <b>Template Update</b>\n"
@@ -162,6 +162,7 @@ class NotificationService:
         # Notify Telegram Admin Group
         from src.clients.telegram import telegram_client
         from src.core.config import settings
+
         if settings.TG_ADMIN_GROUP_ID:
             msg = (
                 f"🏢 <b>WABA Account Update</b>\n"
@@ -188,6 +189,7 @@ class NotificationService:
         # Notify Telegram Admin Group
         from src.clients.telegram import telegram_client
         from src.core.config import settings
+
         if settings.TG_ADMIN_GROUP_ID:
             msg = (
                 f"📱 <b>Phone Number Update</b>\n"

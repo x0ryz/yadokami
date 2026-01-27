@@ -9,7 +9,6 @@ from src.repositories.contact import ContactRepository
 from src.repositories.message import MessageRepository
 from src.repositories.waba import WabaPhoneRepository
 from src.schemas import MetaMessage
-from src.services.campaign.tracker import CampaignTrackerService
 from src.services.media.service import MediaService
 from src.services.messaging.parsers import extract_message_body, prepare_media_task
 from src.services.notifications.service import NotificationService
@@ -29,7 +28,6 @@ class IncomingMessageHandler:
         self.notifier = notifier
 
         # Services & Repositories
-        self.campaign_tracker = CampaignTrackerService(session)
         self.contacts = ContactRepository(session)
         self.messages = MessageRepository(session)
         self.waba_phones = WabaPhoneRepository(session)
@@ -59,6 +57,7 @@ class IncomingMessageHandler:
 
         # 2.0. Якщо контакт в архіві - робимо його активним
         from src.models import ContactStatus
+
         if contact.status == ContactStatus.ARCHIVED:
             contact.status = ContactStatus.ACTIVE
             self.contacts.add(contact)
@@ -71,16 +70,18 @@ class IncomingMessageHandler:
 
         # Перевіряємо ДО збереження нового повідомлення!
         inbound_count = await self.contacts.get_inbound_message_count(contact.id)
-        is_first_message = (inbound_count == 0)
+        is_first_message = inbound_count == 0
 
         if is_first_message:
             has_template = await self.contacts.has_received_template_message(contact.id)
             has_new_user_tag = any(
-                tag.name == "Новий користувач" for tag in contact.tags)
+                tag.name == "Новий користувач" for tag in contact.tags
+            )
 
             if has_template and not has_new_user_tag:
                 # Тільки якщо всі умови виконуються - додаємо "Новий користувач" як manual tag
                 from src.repositories.tag import TagRepository
+
                 tag_repo = TagRepository(self.session)
                 new_user_tag = await tag_repo.get_or_create_tag("Новий користувач")
                 if new_user_tag not in contact.tags:
@@ -142,8 +143,7 @@ class IncomingMessageHandler:
 
         target_msg.reaction = msg.reaction.emoji
         self.messages.add(target_msg)
-        logger.info(
-            f"Updated reaction for msg {target_msg.id}: {msg.reaction.emoji}")
+        logger.info(f"Updated reaction for msg {target_msg.id}: {msg.reaction.emoji}")
 
         await self.session.commit()
 
@@ -157,8 +157,7 @@ class IncomingMessageHandler:
         """Handles NATS publishing and WebSocket notifications."""
         if media_task:
             await broker.publish(media_task, subject="media.download")
-            logger.info(
-                f"Queued media download for msg {media_task['message_id']}")
+            logger.info(f"Queued media download for msg {media_task['message_id']}")
 
         await self.notifier.notify_new_message(
             new_msg,
