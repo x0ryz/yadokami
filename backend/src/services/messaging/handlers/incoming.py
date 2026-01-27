@@ -14,6 +14,8 @@ from src.services.messaging.parsers import extract_message_body, prepare_media_t
 from src.services.notifications.service import NotificationService
 
 
+from src.services.campaign.tracker import CampaignTrackerService
+
 class IncomingMessageHandler:
     """Orchestrates incoming message processing workflow."""
 
@@ -31,6 +33,7 @@ class IncomingMessageHandler:
         self.contacts = ContactRepository(session)
         self.messages = MessageRepository(session)
         self.waba_phones = WabaPhoneRepository(session)
+        self.campaign_tracker = CampaignTrackerService(session, notifier)
 
     async def handle(self, messages: list[MetaMessage], phone_number_id: str):
         """Main entry point."""

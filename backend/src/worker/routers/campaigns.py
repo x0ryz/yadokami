@@ -50,7 +50,9 @@ async def consume_campaign_messages(
                     empty_fetches += 1
                     # After several empty fetches, check if campaign should complete
                     if empty_fetches >= 3:
-                        await service.lifecycle.check_and_complete_if_done(UUID(campaign_id))
+                        camp = await service.lifecycle.check_and_complete_if_done(UUID(campaign_id))
+                        if camp and camp.status in [CampaignStatus.COMPLETED, CampaignStatus.FAILED]:
+                            raise asyncio.CancelledError()
                         empty_fetches = 0
                     continue
                 empty_fetches = 0
@@ -58,7 +60,9 @@ async def consume_campaign_messages(
                 empty_fetches += 1
                 if empty_fetches >= 3:
                     # No messages for a while; check completion
-                    await service.lifecycle.check_and_complete_if_done(UUID(campaign_id))
+                    camp = await service.lifecycle.check_and_complete_if_done(UUID(campaign_id))
+                    if camp and camp.status in [CampaignStatus.COMPLETED, CampaignStatus.FAILED]:
+                         raise asyncio.CancelledError()
                     empty_fetches = 0
                 continue
             except asyncio.CancelledError:
@@ -106,6 +110,11 @@ async def consume_campaign_messages(
                             logger.debug(
                                 f"Skipping message; campaign status={campaign.status}")
                             await msg.ack()
+                            
+                            if campaign.status in [CampaignStatus.COMPLETED, CampaignStatus.FAILED]:
+                                logger.info(f"Campaign {cid} is finished ({campaign.status}), stopping consumer")
+                                raise asyncio.CancelledError()
+                                
                             continue
                     finally:
                         # Ensure session is explicitly closed
@@ -168,6 +177,10 @@ async def consume_campaign_messages(
     finally:
         # Final completion check when consumer exits
         try:
+            # Don't check if we know it's already done to avoid spam logs
+            # We can't easily know status here without querying DB again, 
+            # but usually check_and_complete_if_done handles checks. 
+            # Since we fixed the infinite loop, one extra check is fine.
             await service.lifecycle.check_and_complete_if_done(UUID(campaign_id))
         except Exception as e:
             logger.warning(

@@ -62,6 +62,9 @@ class CampaignRepository(BaseRepository[Campaign]):
                 func.count(case((Message.status == MessageStatus.FAILED, 1))).label(
                     "failed_count"
                 ),
+                func.count(case((CampaignContact.is_replied == True, 1))).label(
+                    "replied_count"
+                ),
             )
             .select_from(Campaign)
             .outerjoin(CampaignContact, Campaign.id == CampaignContact.campaign_id)
@@ -76,7 +79,9 @@ class CampaignRepository(BaseRepository[Campaign]):
         if not row:
             return None
 
-        campaign, total, sent, delivered, read, failed = row
+
+
+        campaign, total, sent, delivered, read, failed, replied = row
 
         camp_dict = {
             c.name: getattr(campaign, c.name) for c in campaign.__table__.columns
@@ -95,7 +100,7 @@ class CampaignRepository(BaseRepository[Campaign]):
                 "delivered_count": delivered,
                 "read_count": read,
                 "failed_count": failed,
-                "replied_count": 0,
+                "replied_count": replied,
             }
         )
 

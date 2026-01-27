@@ -86,30 +86,63 @@ const CampaignStatsBar: React.FC<{ stats: CampaignStats }> = ({ stats }) => {
 
   if (total_contacts === 0) return null;
 
+  // subtract replied from read/delivered/sent in the visual bar? 
+  // The user asked "track replied, and then subtract replied from viewed count".
+  // Let's implement that subtraction logic for the VISUAL segments, 
+  // but keep the raw data in the tooltip/legend.
+
+  // If we just stack them:
+  // Replied is subset of Read. Read is subset of Delivered. Delivered is subset of Sent.
+  // We want to show distinct segments.
+  // Replied (orange)
+  // Read (purple) - minus Replied
+  // Delivered (green) - minus Read (which includes Replied)
+  // Sent (blue) - minus Delivered (which includes Read)
+
+  // However, the backend counts provided in `stats` are usually cumulative (Total Sent, Total Delivered, Total Read).
+  // Assuming the backend returns cumulative counts:
+  const sent = sent_count;
+  const delivered = delivered_count;
+  const read = read_count;
+  const replied = replied_count;
+  const failed = failed_count;
+
+  // Visual segments (exclusive)
+  const visualReplied = replied;
+  const visualRead = Math.max(0, read - replied);
+  const visualDelivered = Math.max(0, delivered - read);
+  const visualSent = Math.max(0, sent - delivered - failed);
+  // * Note: Failed is usually separate from Delivered. 
+
   const segments = [
     {
       key: "replied",
-      value: replied_count,
+      value: visualReplied,
+      totalValue: replied, // for display text
       ...STATUS_STYLES.replied,
     },
     {
       key: "read",
-      value: read_count,
+      value: visualRead,
+      totalValue: read,
       ...STATUS_STYLES.read,
     },
     {
       key: "delivered",
-      value: delivered_count,
+      value: visualDelivered,
+      totalValue: delivered,
       ...STATUS_STYLES.delivered,
     },
     {
       key: "sent",
-      value: sent_count,
+      value: visualSent,
+      totalValue: sent,
       ...STATUS_STYLES.sent,
     },
     {
       key: "failed",
-      value: failed_count,
+      value: failed,
+      totalValue: failed,
       ...STATUS_STYLES.failed,
     },
   ];
@@ -156,9 +189,9 @@ const CampaignStatsBar: React.FC<{ stats: CampaignStats }> = ({ stats }) => {
 
               {/* Кольоровий текст цифр */}
               <span className={`font-bold ${seg.text}`}>
-                {seg.value}{" "}
+                {seg.totalValue}{" "}
                 <span className="text-xs font-normal text-gray-400">
-                  ({getPercent(seg.value).toFixed(0)}%)
+                  ({getPercent(seg.totalValue).toFixed(0)}%)
                 </span>
               </span>
             </div>

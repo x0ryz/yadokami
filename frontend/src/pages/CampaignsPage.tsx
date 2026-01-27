@@ -159,6 +159,7 @@ const CampaignsPage: React.FC = () => {
               sent_count: data.sent,
               delivered_count: data.delivered,
               failed_count: data.failed,
+              replied_count: data.replied,
               progress_percent: data.progress_percent,
               total_contacts: prev.total_contacts, // Ensure we keep other fields
             }

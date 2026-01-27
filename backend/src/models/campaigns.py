@@ -64,6 +64,8 @@ class CampaignContact(Base, UUIDMixin, TimestampMixin):
     message_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("messages.id"), nullable=True
     )
+    
+    is_replied: Mapped[bool] = mapped_column(default=False)
 
     retry_count: Mapped[int] = mapped_column(default=0)
 

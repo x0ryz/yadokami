@@ -107,19 +107,20 @@ class CampaignLifecycleManager:
             completed_at=now.isoformat(),
         )
 
-    async def check_and_complete_if_done(self, campaign_id: UUID):
+    async def check_and_complete_if_done(self, campaign_id: UUID) -> Campaign | None:
         """Check if campaign is completed and update status if so."""
         campaign = await self.campaigns.get_by_id(campaign_id)
 
         if not campaign:
             logger.debug(f"Campaign {campaign_id} not found")
-            return
+            return None
 
         if campaign.status not in [CampaignStatus.RUNNING, CampaignStatus.PAUSED]:
-            logger.debug(
-                f"Campaign {campaign_id} is {campaign.status}, not checking completion"
-            )
-            return
+            # This is normal for completed campaigns, no need to log constantly
+            # logger.debug(
+            #     f"Campaign {campaign_id} is {campaign.status}, not checking completion"
+            # )
+            return campaign
 
         stmt = select(func.count()).where(
             CampaignContact.campaign_id == campaign_id,
@@ -133,11 +134,12 @@ class CampaignLifecycleManager:
                 f"Campaign {campaign_id}: still {remaining} contacts waiting for processing. "
                 f"Not completing yet."
             )
-            return
+            return campaign
 
         logger.info(f"Completing campaign {campaign_id}: all contacts processed.")
 
         await self.complete_campaign(campaign)
+        return campaign
 
     @staticmethod
     def _validate_can_start(campaign: Campaign):
