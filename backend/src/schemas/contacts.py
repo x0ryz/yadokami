@@ -70,7 +70,6 @@ class ContactResponse(UUIDMixin, TimestampMixin):
     phone_number: str
     name: str | None = None
     custom_data: dict[str, Any] = Field(default_factory=dict)
-    unread_count: int
     status: ContactStatus
     last_message_at: datetime | None = None
     last_incoming_message_at: datetime | None = None
@@ -82,7 +81,6 @@ class ContactResponse(UUIDMixin, TimestampMixin):
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "name": "John Doe",
-                "unread_count": 3,
                 "status": "read",
                 "last_message_at": "2024-01-15T10:30:00Z",
                 "last_incoming_message_at": "2024-01-15T10:30:00Z",

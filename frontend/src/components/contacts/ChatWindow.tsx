@@ -31,6 +31,8 @@ import {
   Zap,
   Languages,
   Calendar,
+  ChevronRight,
+  X as XClose,
 } from "lucide-react";
 
 // --- КОМПОНЕНТ ТАЙМЕРА З КІЛЬЦЕМ ТА HOVER-ЕФЕКТОМ ---
@@ -275,6 +277,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
 
+  // Detail Panel State
+  const [showDetailPanel, setShowDetailPanel] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -484,7 +489,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#efeae2]">
+    <div className="flex h-full bg-[#efeae2]">
+      {/* Main Chat Area */}
+      <div className={`flex flex-col flex-1 transition-all duration-300 ${showDetailPanel ? "w-2/3" : "w-full"}`}>
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shadow-sm z-20">
         {/* ЛІВА ЧАСТИНА: Таймер + Інфо про контакт */}
@@ -493,7 +500,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           <SessionTimer lastIncomingAt={contact.last_incoming_message_at} />
 
           {/* ІМ'Я ТА ТЕЛЕФОН */}
-          <div>
+          <div
+            className="cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setShowDetailPanel(true)}
+          >
             {isEditingName ? (
               <div className="flex items-center gap-2">
                 <input
@@ -1092,6 +1102,108 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           );
         })()
       }
+      </div>
+
+      {/* Contact Detail Panel - Sidebar */}
+      {showDetailPanel && (
+        <div className="w-1/3 bg-white border-l border-gray-200 shadow-lg overflow-y-auto flex flex-col transition-all duration-300">
+          {/* Header */}
+          <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between flex-shrink-0">
+            <h3 className="text-lg font-semibold text-gray-900">Contact Info</h3>
+            <button
+              onClick={() => setShowDetailPanel(false)}
+              className="text-gray-400 hover:text-gray-600 p-1"
+            >
+              <XClose size={24} />
+            </button>
+          </div>
+
+          {/* Contact Content */}
+          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+            {/* Profile Section - In-Page Style */}
+            <div className="pb-4">
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                {contact.name || "Unknown Contact"}
+              </h2>
+              <p className="text-base text-gray-600 font-medium">{contact.phone_number}</p>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  contact.status === "active" ? "bg-green-500" : "bg-gray-400"
+                }`}
+              />
+              <span className="text-sm text-gray-700 font-medium">
+                {contact.status === "active" ? "Active" : "Inactive"}
+              </span>
+            </div>
+
+            {/* Custom Data Section - Enhanced Display */}
+            {contact.custom_data &&
+              Object.keys(contact.custom_data).length > 0 && (
+                <div className="border-t border-b border-gray-200 py-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                    Information
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(contact.custom_data).map(([key, value]) => (
+                      <div key={key}>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                          {key.replace(/_/g, " ")}
+                        </p>
+                        {typeof value === "string" && value.startsWith("http") ? (
+                          <a
+                            href={value}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:text-blue-700 hover:underline break-all"
+                          >
+                            {value}
+                          </a>
+                        ) : (
+                          <p className="text-sm text-gray-800 break-words">
+                            {typeof value === "object"
+                              ? JSON.stringify(value, null, 2)
+                              : String(value)}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            {/* Tags */}
+            {contact.tags && contact.tags.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                  Tags
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {contact.tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="text-xs px-3 py-1.5 rounded-lg text-white font-medium"
+                      style={{ backgroundColor: tag.color || "#8B5CF6" }}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Created Date */}
+            <div className="border-t pt-4 text-xs text-gray-500">
+              <p>
+                Added {new Date(contact.created_at).toLocaleDateString("uk-UA")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Reply Picker */}
       <QuickReplyPicker
